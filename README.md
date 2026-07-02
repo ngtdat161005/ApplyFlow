@@ -1,53 +1,48 @@
 # ApplyFlow
 
-ApplyFlow là ứng dụng web cá nhân để theo dõi quá trình ứng tuyển internship/job, recruitment events, reminders và các trường hợp cần chú ý.
+ApplyFlow là ứng dụng web cá nhân để theo dõi quá trình ứng tuyển internship/job — applications, timeline events, và các trường hợp cần chú ý (attention flags).
 
-Repo này dùng cấu trúc monorepo JavaScript với hai app tách riêng:
+> **Status:** Đang trong giai đoạn phát triển V1 theo `docs/ApplyFlow Tasks.md`. Backend infrastructure (Task 02) đã sẵn sàng; các module business (auth, application, event, dashboard) hiện là placeholder.
 
-- `backend/` - Node.js + Express API, dùng MongoDB native driver.
-- `frontend/` - React + Vite frontend app.
-- `docs/` - tài liệu sản phẩm, kiến trúc và task plan.
+## Cấu trúc Monorepo
 
-## Trạng Thái Hiện Tại
+| Thư mục | Nội dung |
+|---|---|
+| `backend/` | Node.js + Express API, MongoDB native driver |
+| `frontend/` | React + Vite SPA |
+| `docs/` | Spec, architecture, task plan — nguồn sự thật cho hành vi & cấu trúc |
 
-Đã hoàn thành:
+Chi tiết hành vi sản phẩm, ranh giới kỹ thuật và thứ tự triển khai nằm ở:
 
-- Task 01 - Monorepo scaffold và base folder structure.
-- Task 02 - Backend bootstrap: Express app, env loading, MongoDB connection bootstrap, health route, JSON 404 handling, global error middleware và server entrypoint.
+- [`docs/ApplyFlow Specification.md`](docs/ApplyFlow%20Specification.md) — sản phẩm làm gì
+- [`docs/ApplyFlow Architecture.md`](docs/ApplyFlow%20Architecture.md) — code tổ chức ra sao
+- [`docs/ApplyFlow Tasks.md`](docs/ApplyFlow%20Tasks.md) — thứ tự & scope từng task
 
-Chưa triển khai:
+README này **không lặp lại** nội dung ở trên — chỉ đóng vai trò index và hướng dẫn chạy dự án.
 
-- Auth endpoints: register, login, current user.
-- JWT auth middleware behavior cho protected routes.
-- Application/event/dashboard business routes.
-- Business repositories/services/controllers.
-- Frontend app shell, router và UI behavior.
+## Yêu cầu hệ thống
 
-## Backend Task 02
+- Node.js 18+ (ESM, `node:fs` APIs)
+- MongoDB instance đang chạy (local hoặc remote), truy cập được qua connection string
+- npm
 
-Backend hiện có foundation tối thiểu để các task sau phát triển tiếp:
+## Setup
 
-- Centralized env config trong `backend/src/config/env.js`.
-- Shared MongoDB lifecycle trong `backend/src/config/mongodb.js`.
-- Express app assembly trong `backend/src/app.js`.
-- Server startup flow trong `backend/src/server.js`.
-- Health route `GET /health` trong `backend/src/routes/index.js`.
-- JSON 404 handler và global error middleware trong `backend/src/middlewares/error.middleware.js`.
-- Logger helper tối giản trong `backend/src/shared/logger.js`.
+1. Copy `.env.example` thành `.env` ở root (hoặc trong `backend/`, `env.js` sẽ tự tìm cả hai vị trí):
 
-Server chỉ bắt đầu listen sau khi kết nối MongoDB thành công. Nếu MongoDB không kết nối được, startup sẽ fail rõ ràng.
+   ```bash
+   cp .env.example .env
+   ```
 
-## Environment
+2. Điền các biến bắt buộc:
 
-Copy `.env.example` thành `.env` ở root repo hoặc trong `backend/` khi chạy backend local.
-
-```env
-PORT=4000
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB_NAME=applyflow
-JWT_SECRET=replace-with-a-local-development-secret
-VITE_API_BASE_URL=http://localhost:4000/api
-```
+   ```env
+   PORT=4000
+   MONGODB_URI=mongodb://localhost:27017
+   MONGODB_DB_NAME=applyflow
+   JWT_SECRET=replace-with-a-local-development-secret
+   VITE_API_BASE_URL=http://localhost:4000/api
+   ```
 
 ## Chạy Backend
 
@@ -57,13 +52,13 @@ npm install
 npm run dev
 ```
 
-Health check:
+Server chỉ bắt đầu listen sau khi kết nối MongoDB thành công — nếu MongoDB không kết nối được, startup sẽ fail rõ ràng thay vì chạy ngầm ở trạng thái lỗi.
+
+Kiểm tra:
 
 ```bash
-GET http://localhost:4000/health
+curl http://localhost:4000/health
 ```
-
-Response mong đợi:
 
 ```json
 {
@@ -73,172 +68,47 @@ Response mong đợi:
 }
 ```
 
-## Project Tree
+## Chạy Frontend
 
-Ghi chú: `node_modules/`, `.git/` và `.agents/` không được liệt kê chi tiết vì đây là thư mục generated/tooling, không phải source structure của dự án.
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Project Tree
 
 ```text
 ApplyFlow/
-├─ .agents/
-├─ .git/
 ├─ backend/
-│  ├─ node_modules/
-│  ├─ src/
-│  │  ├─ app.js
-│  │  ├─ server.js
-│  │  ├─ config/
-│  │  │  ├─ constants.js
-│  │  │  ├─ env.js
-│  │  │  └─ mongodb.js
-│  │  ├─ db/
-│  │  │  ├─ collections.js
-│  │  │  └─ indexes.js
-│  │  ├─ domain/
-│  │  │  ├─ attention/
-│  │  │  │  ├─ attention.rules.js
-│  │  │  │  ├─ attention.service.js
-│  │  │  │  ├─ attention.types.js
-│  │  │  │  └─ attention.utils.js
-│  │  │  ├─ shared/
-│  │  │  │  └─ domain-errors.js
-│  │  │  └─ timeline/
-│  │  │     └─ timeline.utils.js
-│  │  ├─ middlewares/
-│  │  │  ├─ auth.middleware.js
-│  │  │  ├─ error.middleware.js
-│  │  │  └─ validate.middleware.js
-│  │  ├─ modules/
-│  │  │  ├─ application/
-│  │  │  │  ├─ application.controller.js
-│  │  │  │  ├─ application.mapper.js
-│  │  │  │  ├─ application.repository.js
-│  │  │  │  ├─ application.service.js
-│  │  │  │  └─ application.validator.js
-│  │  │  ├─ auth/
-│  │  │  │  ├─ auth.controller.js
-│  │  │  │  ├─ auth.mapper.js
-│  │  │  │  ├─ auth.repository.js
-│  │  │  │  ├─ auth.service.js
-│  │  │  │  └─ auth.validator.js
-│  │  │  ├─ dashboard/
-│  │  │  │  ├─ dashboard.controller.js
-│  │  │  │  ├─ dashboard.mapper.js
-│  │  │  │  └─ dashboard.service.js
-│  │  │  └─ event/
-│  │  │     ├─ event.controller.js
-│  │  │     ├─ event.mapper.js
-│  │  │     ├─ event.repository.js
-│  │  │     ├─ event.service.js
-│  │  │     └─ event.validator.js
-│  │  ├─ routes/
-│  │  │  ├─ application.route.js
-│  │  │  ├─ auth.route.js
-│  │  │  ├─ dashboard.route.js
-│  │  │  ├─ event.route.js
-│  │  │  └─ index.js
-│  │  ├─ shared/
-│  │  │  ├─ api-response.js
-│  │  │  └─ logger.js
-│  │  └─ utils/
-│  │     ├─ async-handler.js
-│  │     ├─ date.utils.js
-│  │     ├─ object-id.utils.js
-│  │     └─ pagination.utils.js
-│  ├─ package-lock.json
-│  └─ package.json
+│  └─ src/
+│     ├─ app.js
+│     ├─ server.js
+│     ├─ config/        # env.js, mongodb.js, constants.js
+│     ├─ db/             # collections.js, indexes.js
+│     ├─ domain/         # attention/, timeline/, shared/
+│     ├─ middlewares/    # auth, error, validate
+│     ├─ modules/        # application/, auth/, dashboard/, event/
+│     ├─ routes/
+│     ├─ shared/         # api-response.js, logger.js
+│     └─ utils/
 ├─ docs/
-│  ├─ exports/
-│  │  ├─ ApplyFlow Architecture.pdf
-│  │  ├─ ApplyFlow Specification.pdf
-│  │  └─ ApplyFlow Tasks.pdf
+│  ├─ exports/           # bản PDF của spec/architecture/tasks
 │  ├─ ApplyFlow Architecture.md
 │  ├─ ApplyFlow Specification.md
 │  └─ ApplyFlow Tasks.md
 ├─ frontend/
-│  ├─ src/
-│  │  ├─ App.jsx
-│  │  ├─ main.jsx
-│  │  ├─ api/
-│  │  │  ├─ application.api.js
-│  │  │  ├─ auth.api.js
-│  │  │  ├─ dashboard.api.js
-│  │  │  ├─ event.api.js
-│  │  │  └─ http-client.js
-│  │  ├─ app/
-│  │  │  ├─ providers.jsx
-│  │  │  ├─ query-client.js
-│  │  │  └─ router.jsx
-│  │  ├─ components/
-│  │  │  ├─ common/
-│  │  │  │  └─ .gitkeep
-│  │  │  ├─ feedback/
-│  │  │  │  └─ .gitkeep
-│  │  │  └─ layout/
-│  │  │     └─ .gitkeep
-│  │  ├─ constants/
-│  │  │  └─ status.js
-│  │  ├─ features/
-│  │  │  ├─ applications/
-│  │  │  │  ├─ application.utils.js
-│  │  │  │  ├─ components/
-│  │  │  │  │  ├─ ApplicationCard.jsx
-│  │  │  │  │  ├─ ApplicationFilters.jsx
-│  │  │  │  │  ├─ ApplicationForm.jsx
-│  │  │  │  │  ├─ ApplicationList.jsx
-│  │  │  │  │  └─ StatusBadge.jsx
-│  │  │  │  └─ hooks/
-│  │  │  │     └─ .gitkeep
-│  │  │  ├─ auth/
-│  │  │  │  ├─ auth.store.js
-│  │  │  │  ├─ auth.utils.js
-│  │  │  │  ├─ components/
-│  │  │  │  │  └─ .gitkeep
-│  │  │  │  └─ hooks/
-│  │  │  │     └─ .gitkeep
-│  │  │  ├─ dashboard/
-│  │  │  │  ├─ components/
-│  │  │  │  │  ├─ AttentionFlagsList.jsx
-│  │  │  │  │  ├─ StatusSummaryCards.jsx
-│  │  │  │  │  └─ UpcomingEventsList.jsx
-│  │  │  │  └─ hooks/
-│  │  │  │     └─ .gitkeep
-│  │  │  └─ events/
-│  │  │     ├─ event.utils.js
-│  │  │     ├─ components/
-│  │  │     │  ├─ EventForm.jsx
-│  │  │     │  ├─ EventItem.jsx
-│  │  │     │  └─ EventTimeline.jsx
-│  │  │     └─ hooks/
-│  │  │        └─ .gitkeep
-│  │  ├─ hooks/
-│  │  │  └─ useDocumentTitle.js
-│  │  ├─ pages/
-│  │  │  ├─ ApplicationDetailPage/
-│  │  │  │  └─ ApplicationDetailPage.jsx
-│  │  │  ├─ ApplicationsPage/
-│  │  │  │  └─ ApplicationsPage.jsx
-│  │  │  ├─ DashboardPage/
-│  │  │  │  └─ DashboardPage.jsx
-│  │  │  ├─ LoginPage/
-│  │  │  │  └─ LoginPage.jsx
-│  │  │  └─ RegisterPage/
-│  │  │     └─ RegisterPage.jsx
-│  │  └─ utils/
-│  │     ├─ date.utils.js
-│  │     └─ storage.utils.js
-│  ├─ index.html
-│  └─ package.json
+│  └─ src/
+│     ├─ api/
+│     ├─ app/            # router.jsx, providers.jsx, query-client.js
+│     ├─ components/
+│     ├─ constants/
+│     ├─ features/       # applications/, auth/, dashboard/, events/
+│     ├─ hooks/
+│     ├─ pages/
+│     └─ utils/
 ├─ .env.example
-├─ .gitignore
-└─ README.md
+└─ .gitignore
 ```
 
-## Tài Liệu Nguồn
-
-- `docs/ApplyFlow Specification.md` - hành vi sản phẩm.
-- `docs/ApplyFlow Architecture.md` - cấu trúc code và ranh giới kỹ thuật.
-- `docs/ApplyFlow Tasks.md` - thứ tự task và scope từng bước.
-
-## Ghi Chú Scope
-
-Các file module như `auth`, `application`, `event`, `dashboard` hiện phần lớn vẫn là placeholder từ Task 01. Task 02 chỉ làm backend infrastructure/bootstrap, không triển khai business logic.
+> Cây thư mục trên là bản rút gọn để định hướng nhanh. Cấu trúc đầy đủ, chi tiết từng module và lý do tổ chức như vậy nằm trong `docs/ApplyFlow Architecture.md`.
