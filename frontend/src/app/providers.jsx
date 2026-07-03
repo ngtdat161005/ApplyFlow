@@ -1,3 +1,5 @@
+import { AuthProvider } from '../features/auth/auth.store.js';
+
 export function AppProviders({ children }) {
-  return children;
+  return <AuthProvider>{children}</AuthProvider>;
 }
