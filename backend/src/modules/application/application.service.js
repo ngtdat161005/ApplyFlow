@@ -1,7 +1,13 @@
-import { UnauthorizedError } from "../../domain/shared/domain-errors.js";
+import { NotFoundError, UnauthorizedError } from "../../domain/shared/domain-errors.js";
 import { toObjectId } from "../../utils/object-id.utils.js";
 import { mapApplicationToResponse, mapApplicationsToResponse } from "./application.mapper.js";
-import { createApplicationDocument, findApplicationsByUser } from "./application.repository.js";
+import {
+  createApplicationDocument,
+  deleteApplicationByIdForUser,
+  findApplicationByIdForUser,
+  findApplicationsByUser,
+  updateApplicationByIdForUser,
+} from "./application.repository.js";
 
 function getAuthenticatedUserObjectId(userId) {
   const userObjectId = toObjectId(userId);
@@ -11,6 +17,20 @@ function getAuthenticatedUserObjectId(userId) {
   }
 
   return userObjectId;
+}
+
+function getApplicationObjectId(applicationId) {
+  const applicationObjectId = toObjectId(applicationId);
+
+  if (!applicationObjectId) {
+    throw new NotFoundError("Application not found");
+  }
+
+  return applicationObjectId;
+}
+
+async function deleteApplicationEventsForApplication(_userId, _applicationId) {
+  // Event cascade delete will be added when the event repository is implemented.
 }
 
 export async function createApplication(userId, payload) {
@@ -38,4 +58,47 @@ export async function listApplications(userId, options) {
   const applications = await findApplicationsByUser(userObjectId, options);
 
   return mapApplicationsToResponse(applications);
+}
+
+export async function getApplication(userId, applicationId) {
+  const userObjectId = getAuthenticatedUserObjectId(userId);
+  const applicationObjectId = getApplicationObjectId(applicationId);
+  const application = await findApplicationByIdForUser(userObjectId, applicationObjectId);
+
+  if (!application) {
+    throw new NotFoundError("Application not found");
+  }
+
+  return mapApplicationToResponse(application);
+}
+
+export async function updateApplication(userId, applicationId, updates) {
+  const userObjectId = getAuthenticatedUserObjectId(userId);
+  const applicationObjectId = getApplicationObjectId(applicationId);
+  const updatedApplication = await updateApplicationByIdForUser(
+    userObjectId,
+    applicationObjectId,
+    {
+      ...updates,
+      updatedAt: new Date(),
+    },
+  );
+
+  if (!updatedApplication) {
+    throw new NotFoundError("Application not found");
+  }
+
+  return mapApplicationToResponse(updatedApplication);
+}
+
+export async function deleteApplication(userId, applicationId) {
+  const userObjectId = getAuthenticatedUserObjectId(userId);
+  const applicationObjectId = getApplicationObjectId(applicationId);
+  const deleted = await deleteApplicationByIdForUser(userObjectId, applicationObjectId);
+
+  if (!deleted) {
+    throw new NotFoundError("Application not found");
+  }
+
+  await deleteApplicationEventsForApplication(userObjectId, applicationObjectId);
 }
