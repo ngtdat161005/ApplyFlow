@@ -1,3 +1,83 @@
-// Auth service will be implemented in Task 04.
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { config } from "../../config/env.js";
+import { ConflictError, UnauthorizedError } from "../../domain/shared/domain-errors.js";
+import { createUser, findUserByEmail, findUserById } from "./auth.repository.js";
+import { mapUserToSafeUser } from "./auth.mapper.js";
 
-export {};
+const BCRYPT_SALT_ROUNDS = 12;
+const ACCESS_TOKEN_EXPIRES_IN = "1d";
+
+function createAccessToken(user) {
+  return jwt.sign(
+    {
+      sub: user._id.toString(),
+    },
+    config.jwtSecret,
+    {
+      expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+    },
+  );
+}
+
+function isDuplicateKeyError(error) {
+  return error?.code === 11000;
+}
+
+export async function registerUser(payload) {
+  const existingUser = await findUserByEmail(payload.email);
+
+  if (existingUser) {
+    throw new ConflictError("Email is already registered");
+  }
+
+  const now = new Date();
+  const passwordHash = await bcrypt.hash(payload.password, BCRYPT_SALT_ROUNDS);
+
+  try {
+    const user = await createUser({
+      displayName: payload.displayName,
+      email: payload.email,
+      passwordHash,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return mapUserToSafeUser(user);
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new ConflictError("Email is already registered");
+    }
+
+    throw error;
+  }
+}
+
+export async function loginUser(payload) {
+  const user = await findUserByEmail(payload.email);
+
+  if (!user) {
+    throw new UnauthorizedError("Invalid email or password");
+  }
+
+  const passwordMatches = await bcrypt.compare(payload.password, user.passwordHash);
+
+  if (!passwordMatches) {
+    throw new UnauthorizedError("Invalid email or password");
+  }
+
+  return {
+    accessToken: createAccessToken(user),
+    user: mapUserToSafeUser(user),
+  };
+}
+
+export async function getCurrentUser(userId) {
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new UnauthorizedError("Authenticated user no longer exists");
+  }
+
+  return mapUserToSafeUser(user);
+}

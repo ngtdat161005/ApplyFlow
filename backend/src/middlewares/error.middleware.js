@@ -26,6 +26,7 @@ export function errorMiddleware(err, _req, res, _next) {
     success: false,
     error: {
       message,
+      ...(err.errors ? { errors: err.errors } : {}),
       ...(config.nodeEnv !== "production" && err.stack ? { stack: err.stack } : {}),
     },
   });
