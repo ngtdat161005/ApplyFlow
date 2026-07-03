@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AppLayout } from '../components/layout/AppLayout.jsx';
+import { ProtectedRoute, PublicOnlyRoute } from '../features/auth/components/AuthRoutes.jsx';
 import ApplicationDetailPage from '../pages/ApplicationDetailPage/ApplicationDetailPage.jsx';
 import ApplicationsPage from '../pages/ApplicationsPage/ApplicationsPage.jsx';
 import DashboardPage from '../pages/DashboardPage/DashboardPage.jsx';
@@ -14,27 +15,37 @@ export const router = createBrowserRouter([
     element: <Navigate to="/dashboard" replace />,
   },
   {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/register',
-    element: <RegisterPage />,
-  },
-  {
-    element: <AppLayout />,
+    element: <PublicOnlyRoute />,
     children: [
       {
-        path: '/dashboard',
-        element: <DashboardPage />,
+        path: '/login',
+        element: <LoginPage />,
       },
       {
-        path: '/applications',
-        element: <ApplicationsPage />,
+        path: '/register',
+        element: <RegisterPage />,
       },
+    ],
+  },
+  {
+    element: <ProtectedRoute />,
+    children: [
       {
-        path: '/applications/:applicationId',
-        element: <ApplicationDetailPage />,
+        element: <AppLayout />,
+        children: [
+          {
+            path: '/dashboard',
+            element: <DashboardPage />,
+          },
+          {
+            path: '/applications',
+            element: <ApplicationsPage />,
+          },
+          {
+            path: '/applications/:applicationId',
+            element: <ApplicationDetailPage />,
+          },
+        ],
       },
     ],
   },
