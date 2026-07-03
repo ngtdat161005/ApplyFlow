@@ -1,3 +1,3 @@
-// App-level providers will be implemented in Task 03.
-
-export {};
+export function AppProviders({ children }) {
+  return children;
+}
