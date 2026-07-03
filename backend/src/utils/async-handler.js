@@ -1,3 +1,5 @@
-// Async route helper will be implemented in Task 02 if needed.
-
-export {};
+export function asyncHandler(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
