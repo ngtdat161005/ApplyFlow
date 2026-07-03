@@ -35,6 +35,10 @@ export function createApplication(payload) {
   });
 }
 
+export function getApplication(applicationId) {
+  return httpRequest(`/applications/${applicationId}`);
+}
+
 export function getApplicationListFromResponse(response) {
   if (Array.isArray(response)) {
     return response;
