@@ -203,6 +203,7 @@ It is one application split into:
 - **Backend API**: Node + Express
 - **Database**: MongoDB
 ## <a name="logical-view"></a>3.1 Logical View
+```text
 Frontend (React/Vite)
         |
         v
@@ -212,7 +213,7 @@ Frontend (React/Vite)
 Route -> Middleware -> Controller -> Service -> Repository -> MongoDB
                               |
                               +-> Domain logic / attention rules / validators
-
+```
 -----
 ## <a name="why-this-architecture"></a>3.2 Why This Architecture
 This architecture is chosen because it is:
@@ -281,6 +282,7 @@ Each domain gets an explicit repository file.
 -----
 # <a name="backend-folder-structure"></a>6. Backend Folder Structure
 ## <a name="target-backend-structure"></a>6.1 Target Backend Structure
+```text
 backend/
 └─ src/
    ├─ app.js
@@ -356,7 +358,7 @@ backend/
    └─ shared/
       ├─ api-response.js
       └─ logger.js
-
+```
 -----
 # <a name="backend-layer-responsibilities"></a>7. Backend Layer Responsibilities
 # <a name="route-layer"></a>7.1 Route Layer
@@ -1015,6 +1017,7 @@ It should not become a random pile of pages and hooks.
 
 -----
 # <a name="target-frontend-structure"></a>18.2 Target Frontend Structure
+```text
 frontend/
 └─ src/
    ├─ main.jsx
@@ -1090,7 +1093,7 @@ frontend/
    │
    └─ constants/
       └─ status.js
-
+```
 -----
 # <a name="frontend-design-principles"></a>19. Frontend Design Principles
 ## <a name="page-vs-feature-split"></a>19.1 Page vs Feature Split
