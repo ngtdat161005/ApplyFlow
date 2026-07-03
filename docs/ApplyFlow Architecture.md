@@ -203,7 +203,15 @@ It is one application split into:
 - **Backend API**: Node + Express
 - **Database**: MongoDB
 ## <a name="logical-view"></a>3.1 Logical View
-text id="3y6j2t" Frontend (React/Vite)         |         v HTTP API (Express)         |         v Route -> Middleware -> Controller -> Service -> Repository -> MongoDB                               |                               +-> Domain logic / attention rules / validators
+Frontend (React/Vite)
+        |
+        v
+   HTTP API (Express)
+        |
+        v
+Route -> Middleware -> Controller -> Service -> Repository -> MongoDB
+                              |
+                              +-> Domain logic / attention rules / validators
 
 -----
 ## <a name="why-this-architecture"></a>3.2 Why This Architecture
@@ -273,7 +281,81 @@ Each domain gets an explicit repository file.
 -----
 # <a name="backend-folder-structure"></a>6. Backend Folder Structure
 ## <a name="target-backend-structure"></a>6.1 Target Backend Structure
-text id="8u4dpa" backend/ └─ src/    ├─ app.js    ├─ server.js    │    ├─ config/    │  ├─ env.js    │  ├─ mongodb.js    │  └─ constants.js    │    ├─ routes/    │  ├─ index.js    │  ├─ auth.route.js    │  ├─ application.route.js    │  ├─ event.route.js    │  └─ dashboard.route.js    │    ├─ middlewares/    │  ├─ auth.middleware.js    │  ├─ error.middleware.js    │  └─ validate.middleware.js    │    ├─ modules/    │  ├─ auth/    │  │  ├─ auth.controller.js    │  │  ├─ auth.service.js    │  │  ├─ auth.repository.js    │  │  ├─ auth.validator.js    │  │  └─ auth.mapper.js    │  │    │  ├─ application/    │  │  ├─ application.controller.js    │  │  ├─ application.service.js    │  │  ├─ application.repository.js    │  │  ├─ application.validator.js    │  │  └─ application.mapper.js    │  │    │  ├─ event/    │  │  ├─ event.controller.js    │  │  ├─ event.service.js    │  │  ├─ event.repository.js    │  │  ├─ event.validator.js    │  │  └─ event.mapper.js    │  │    │  └─ dashboard/    │     ├─ dashboard.controller.js    │     ├─ dashboard.service.js    │     └─ dashboard.mapper.js    │    ├─ domain/    │  ├─ attention/    │  │  ├─ attention.service.js    │  │  ├─ attention.rules.js    │  │  ├─ attention.types.js    │  │  └─ attention.utils.js    │  │    │  ├─ timeline/    │  │  └─ timeline.utils.js    │  │    │  └─ shared/    │     └─ domain-errors.js    │    ├─ db/    │  ├─ collections.js    │  └─ indexes.js    │    ├─ utils/    │  ├─ async-handler.js    │  ├─ date.utils.js    │  ├─ object-id.utils.js    │  └─ pagination.utils.js    │    └─ shared/       ├─ api-response.js       └─ logger.js
+backend/
+└─ src/
+   ├─ app.js
+   ├─ server.js
+   │
+   ├─ config/
+   │  ├─ env.js
+   │  ├─ mongodb.js
+   │  └─ constants.js
+   │
+   ├─ routes/
+   │  ├─ index.js
+   │  ├─ auth.route.js
+   │  ├─ application.route.js
+   │  ├─ event.route.js
+   │  └─ dashboard.route.js
+   │
+   ├─ middlewares/
+   │  ├─ auth.middleware.js
+   │  ├─ error.middleware.js
+   │  └─ validate.middleware.js
+   │
+   ├─ modules/
+   │  ├─ auth/
+   │  │  ├─ auth.controller.js
+   │  │  ├─ auth.service.js
+   │  │  ├─ auth.repository.js
+   │  │  ├─ auth.validator.js
+   │  │  └─ auth.mapper.js
+   │  │
+   │  ├─ application/
+   │  │  ├─ application.controller.js
+   │  │  ├─ application.service.js
+   │  │  ├─ application.repository.js
+   │  │  ├─ application.validator.js
+   │  │  └─ application.mapper.js
+   │  │
+   │  ├─ event/
+   │  │  ├─ event.controller.js
+   │  │  ├─ event.service.js
+   │  │  ├─ event.repository.js
+   │  │  ├─ event.validator.js
+   │  │  └─ event.mapper.js
+   │  │
+   │  └─ dashboard/
+   │     ├─ dashboard.controller.js
+   │     ├─ dashboard.service.js
+   │     └─ dashboard.mapper.js
+   │
+   ├─ domain/
+   │  ├─ attention/
+   │  │  ├─ attention.service.js
+   │  │  ├─ attention.rules.js
+   │  │  ├─ attention.types.js
+   │  │  └─ attention.utils.js
+   │  │
+   │  ├─ timeline/
+   │  │  └─ timeline.utils.js
+   │  │
+   │  └─ shared/
+   │     └─ domain-errors.js
+   │
+   ├─ db/
+   │  ├─ collections.js
+   │  └─ indexes.js
+   │
+   ├─ utils/
+   │  ├─ async-handler.js
+   │  ├─ date.utils.js
+   │  ├─ object-id.utils.js
+   │  └─ pagination.utils.js
+   │
+   └─ shared/
+      ├─ api-response.js
+      └─ logger.js
 
 -----
 # <a name="backend-layer-responsibilities"></a>7. Backend Layer Responsibilities
@@ -933,7 +1015,81 @@ It should not become a random pile of pages and hooks.
 
 -----
 # <a name="target-frontend-structure"></a>18.2 Target Frontend Structure
-text id="y9u5ga" frontend/ └─ src/    ├─ main.jsx    ├─ App.jsx    │    ├─ app/    │  ├─ router.jsx    │  ├─ providers.jsx    │  └─ query-client.js    │    ├─ api/    │  ├─ http-client.js    │  ├─ auth.api.js    │  ├─ application.api.js    │  ├─ event.api.js    │  └─ dashboard.api.js    │    ├─ pages/    │  ├─ LoginPage/    │  │  └─ LoginPage.jsx    │  ├─ RegisterPage/    │  │  └─ RegisterPage.jsx    │  ├─ DashboardPage/    │  │  └─ DashboardPage.jsx    │  ├─ ApplicationsPage/    │  │  └─ ApplicationsPage.jsx    │  └─ ApplicationDetailPage/    │     └─ ApplicationDetailPage.jsx    │    ├─ features/    │  ├─ auth/    │  │  ├─ components/    │  │  ├─ hooks/    │  │  ├─ auth.store.js    │  │  └─ auth.utils.js    │  │    │  ├─ applications/    │  │  ├─ components/    │  │  │  ├─ ApplicationList.jsx    │  │  │  ├─ ApplicationCard.jsx    │  │  │  ├─ ApplicationForm.jsx    │  │  │  ├─ ApplicationFilters.jsx    │  │  │  └─ StatusBadge.jsx    │  │  ├─ hooks/    │  │  └─ application.utils.js    │  │    │  ├─ events/    │  │  ├─ components/    │  │  │  ├─ EventTimeline.jsx    │  │  │  ├─ EventItem.jsx    │  │  │  └─ EventForm.jsx    │  │  ├─ hooks/    │  │  └─ event.utils.js    │  │    │  └─ dashboard/    │     ├─ components/    │     │  ├─ StatusSummaryCards.jsx    │     │  ├─ UpcomingEventsList.jsx    │     │  └─ AttentionFlagsList.jsx    │     └─ hooks/    │    ├─ components/    │  ├─ layout/    │  ├─ common/    │  └─ feedback/    │    ├─ hooks/    │  └─ useDocumentTitle.js    │    ├─ utils/    │  ├─ date.utils.js    │  └─ storage.utils.js    │    └─ constants/       └─ status.js
+frontend/
+└─ src/
+   ├─ main.jsx
+   ├─ App.jsx
+   │
+   ├─ app/
+   │  ├─ router.jsx
+   │  ├─ providers.jsx
+   │  └─ query-client.js
+   │
+   ├─ api/
+   │  ├─ http-client.js
+   │  ├─ auth.api.js
+   │  ├─ application.api.js
+   │  ├─ event.api.js
+   │  └─ dashboard.api.js
+   │
+   ├─ pages/
+   │  ├─ LoginPage/
+   │  │  └─ LoginPage.jsx
+   │  ├─ RegisterPage/
+   │  │  └─ RegisterPage.jsx
+   │  ├─ DashboardPage/
+   │  │  └─ DashboardPage.jsx
+   │  ├─ ApplicationsPage/
+   │  │  └─ ApplicationsPage.jsx
+   │  └─ ApplicationDetailPage/
+   │     └─ ApplicationDetailPage.jsx
+   │
+   ├─ features/
+   │  ├─ auth/
+   │  │  ├─ components/
+   │  │  ├─ hooks/
+   │  │  ├─ auth.store.js
+   │  │  └─ auth.utils.js
+   │  │
+   │  ├─ applications/
+   │  │  ├─ components/
+   │  │  │  ├─ ApplicationList.jsx
+   │  │  │  ├─ ApplicationCard.jsx
+   │  │  │  ├─ ApplicationForm.jsx
+   │  │  │  ├─ ApplicationFilters.jsx
+   │  │  │  └─ StatusBadge.jsx
+   │  │  ├─ hooks/
+   │  │  └─ application.utils.js
+   │  │
+   │  ├─ events/
+   │  │  ├─ components/
+   │  │  │  ├─ EventTimeline.jsx
+   │  │  │  ├─ EventItem.jsx
+   │  │  │  └─ EventForm.jsx
+   │  │  ├─ hooks/
+   │  │  └─ event.utils.js
+   │  │
+   │  └─ dashboard/
+   │     ├─ components/
+   │     │  ├─ StatusSummaryCards.jsx
+   │     │  ├─ UpcomingEventsList.jsx
+   │     │  └─ AttentionFlagsList.jsx
+   │     └─ hooks/
+   │
+   ├─ components/
+   │  ├─ layout/
+   │  ├─ common/
+   │  └─ feedback/
+   │
+   ├─ hooks/
+   │  └─ useDocumentTitle.js
+   │
+   ├─ utils/
+   │  ├─ date.utils.js
+   │  └─ storage.utils.js
+   │
+   └─ constants/
+      └─ status.js
 
 -----
 # <a name="frontend-design-principles"></a>19. Frontend Design Principles
