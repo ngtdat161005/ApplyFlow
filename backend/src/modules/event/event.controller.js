@@ -1,4 +1,9 @@
-import { createApplicationEvent, listApplicationEvents } from "./event.service.js";
+import {
+  createApplicationEvent,
+  deleteApplicationEvent,
+  listApplicationEvents,
+  updateApplicationEvent,
+} from "./event.service.js";
 
 export async function create(req, res) {
   const event = await createApplicationEvent(
@@ -20,5 +25,33 @@ export async function list(req, res) {
   res.status(200).json({
     success: true,
     events,
+  });
+}
+
+export async function update(req, res) {
+  const event = await updateApplicationEvent(
+    req.user.id,
+    req.validatedParams.applicationId,
+    req.validatedParams.eventId,
+    req.validatedBody,
+  );
+
+  res.status(200).json({
+    success: true,
+    message: "Event updated successfully",
+    event,
+  });
+}
+
+export async function remove(req, res) {
+  await deleteApplicationEvent(
+    req.user.id,
+    req.validatedParams.applicationId,
+    req.validatedParams.eventId,
+  );
+
+  res.status(200).json({
+    success: true,
+    message: "Event deleted successfully",
   });
 }

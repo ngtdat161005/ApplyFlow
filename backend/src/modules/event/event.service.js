@@ -2,7 +2,12 @@ import { NotFoundError, UnauthorizedError } from "../../domain/shared/domain-err
 import { findApplicationByIdForUser } from "../application/application.repository.js";
 import { toObjectId } from "../../utils/object-id.utils.js";
 import { mapEventToResponse, mapEventsToResponse } from "./event.mapper.js";
-import { createEventDocument, findEventsByApplicationForUser } from "./event.repository.js";
+import {
+  createEventDocument,
+  deleteEventByIdForUser,
+  findEventsByApplicationForUser,
+  updateEventByIdForUser,
+} from "./event.repository.js";
 
 function getAuthenticatedUserObjectId(userId) {
   const userObjectId = toObjectId(userId);
@@ -22,6 +27,16 @@ function getApplicationObjectId(applicationId) {
   }
 
   return applicationObjectId;
+}
+
+function getEventObjectId(eventId) {
+  const eventObjectId = toObjectId(eventId);
+
+  if (!eventObjectId) {
+    throw new NotFoundError("Event not found");
+  }
+
+  return eventObjectId;
 }
 
 async function assertUserOwnsApplication(userId, applicationId) {
@@ -69,4 +84,42 @@ export async function listApplicationEvents(userId, applicationId) {
   const events = await findEventsByApplicationForUser(userObjectId, applicationObjectId);
 
   return mapEventsToResponse(events);
+}
+
+export async function updateApplicationEvent(userId, applicationId, eventId, updates) {
+  const userObjectId = getAuthenticatedUserObjectId(userId);
+  const applicationObjectId = getApplicationObjectId(applicationId);
+  const eventObjectId = getEventObjectId(eventId);
+
+  await assertUserOwnsApplication(userObjectId, applicationObjectId);
+
+  const updatedEvent = await updateEventByIdForUser(
+    userObjectId,
+    applicationObjectId,
+    eventObjectId,
+    {
+      ...updates,
+      updatedAt: new Date(),
+    },
+  );
+
+  if (!updatedEvent) {
+    throw new NotFoundError("Event not found");
+  }
+
+  return mapEventToResponse(updatedEvent);
+}
+
+export async function deleteApplicationEvent(userId, applicationId, eventId) {
+  const userObjectId = getAuthenticatedUserObjectId(userId);
+  const applicationObjectId = getApplicationObjectId(applicationId);
+  const eventObjectId = getEventObjectId(eventId);
+
+  await assertUserOwnsApplication(userObjectId, applicationObjectId);
+
+  const deleted = await deleteEventByIdForUser(userObjectId, applicationObjectId, eventObjectId);
+
+  if (!deleted) {
+    throw new NotFoundError("Event not found");
+  }
 }
