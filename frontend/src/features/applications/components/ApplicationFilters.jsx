@@ -1,3 +1,112 @@
-// Application filters component will be implemented in the applications frontend task.
+import { useEffect, useState } from 'react';
 
-export {};
+import { APPLICATION_STATUS_OPTIONS } from '../../../constants/status.js';
+
+const SORT_FIELD_OPTIONS = [
+  { value: 'updatedAt', label: 'Updated date' },
+  { value: 'createdAt', label: 'Created date' },
+];
+
+const SORT_ORDER_OPTIONS = [
+  { value: 'desc', label: 'Newest first' },
+  { value: 'asc', label: 'Oldest first' },
+];
+
+export function ApplicationFilters({ filters, isLoading, onApply, onReset }) {
+  const [draftFilters, setDraftFilters] = useState(filters);
+
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
+  function handleChange(event) {
+    const { name, value } = event.target;
+
+    setDraftFilters((currentFilters) => ({
+      ...currentFilters,
+      [name]: value,
+    }));
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onApply({
+      ...draftFilters,
+      search: draftFilters.search.trim(),
+    });
+  }
+
+  return (
+    <form className="application-filters" onSubmit={handleSubmit}>
+      <label>
+        Search
+        <input
+          disabled={isLoading}
+          name="search"
+          onChange={handleChange}
+          placeholder="Company or role"
+          type="search"
+          value={draftFilters.search}
+        />
+      </label>
+
+      <label>
+        Status
+        <select
+          disabled={isLoading}
+          name="status"
+          onChange={handleChange}
+          value={draftFilters.status}
+        >
+          <option value="">All statuses</option>
+          {APPLICATION_STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Sort by
+        <select
+          disabled={isLoading}
+          name="sortBy"
+          onChange={handleChange}
+          value={draftFilters.sortBy}
+        >
+          {SORT_FIELD_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Order
+        <select
+          disabled={isLoading}
+          name="sortOrder"
+          onChange={handleChange}
+          value={draftFilters.sortOrder}
+        >
+          {SORT_ORDER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="application-filter-actions">
+        <button disabled={isLoading} type="submit">
+          Apply
+        </button>
+        <button disabled={isLoading} type="button" onClick={onReset}>
+          Reset
+        </button>
+      </div>
+    </form>
+  );
+}
