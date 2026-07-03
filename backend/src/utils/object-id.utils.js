@@ -1,3 +1,9 @@
-// ObjectId utilities will be implemented when MongoDB access is added.
+import { ObjectId } from "mongodb";
 
-export {};
+export function toObjectId(id) {
+  if (!ObjectId.isValid(id)) {
+    return null;
+  }
+
+  return new ObjectId(id);
+}
