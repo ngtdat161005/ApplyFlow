@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { create, list } from "../modules/event/event.controller.js";
+import { create, list, remove, update } from "../modules/event/event.controller.js";
 import {
+  validateApplicationEventDetailParams,
   validateApplicationEventParams,
   validateCreateEventPayload,
+  validateUpdateEventPayload,
 } from "../modules/event/event.validator.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { validateBody, validateParams } from "../middlewares/validate.middleware.js";
@@ -22,6 +24,19 @@ router.get(
   requireAuth,
   validateParams(validateApplicationEventParams),
   asyncHandler(list),
+);
+router.patch(
+  "/:eventId",
+  requireAuth,
+  validateParams(validateApplicationEventDetailParams),
+  validateBody(validateUpdateEventPayload),
+  asyncHandler(update),
+);
+router.delete(
+  "/:eventId",
+  requireAuth,
+  validateParams(validateApplicationEventDetailParams),
+  asyncHandler(remove),
 );
 
 export default router;
