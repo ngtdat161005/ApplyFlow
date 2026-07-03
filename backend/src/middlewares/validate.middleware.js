@@ -25,3 +25,16 @@ export function validateQuery(validator) {
     return next();
   };
 }
+
+export function validateParams(validator) {
+  return (req, _res, next) => {
+    const result = validator(req.params ?? {});
+
+    if (result.errors && Object.keys(result.errors).length > 0) {
+      return next(new ValidationError(result.errors));
+    }
+
+    req.validatedParams = result.value;
+    return next();
+  };
+}

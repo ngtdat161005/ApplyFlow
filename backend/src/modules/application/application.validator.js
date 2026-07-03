@@ -5,6 +5,7 @@ import {
 } from "../../config/constants.js";
 
 const LIST_QUERY_FIELDS = ["search", "status", "sortBy", "sortOrder"];
+const UPDATE_FIELDS = ["company", "role", "jdUrl", "source", "notes", "currentStatus", "followUpAt"];
 
 function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -159,6 +160,111 @@ export function validateListApplicationsQuery(query) {
       sortBy,
       sortOrder,
     },
+    errors,
+  };
+}
+
+export function validateApplicationIdParams(params) {
+  const applicationId = normalizeString(params.applicationId);
+  const errors = {};
+
+  if (!applicationId) {
+    errors.applicationId = "Application ID is required";
+  } else if (!/^[a-f\d]{24}$/i.test(applicationId)) {
+    errors.applicationId = "Application ID must be a valid ObjectId";
+  }
+
+  return {
+    value: {
+      applicationId,
+    },
+    errors,
+  };
+}
+
+export function validateUpdateApplicationPayload(payload) {
+  const errors = {};
+  const updates = {};
+  const unknownFields = Object.keys(payload).filter((fieldName) => !UPDATE_FIELDS.includes(fieldName));
+
+  if (unknownFields.length > 0) {
+    errors.body = `Unsupported field(s): ${unknownFields.join(", ")}`;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "company")) {
+    const company = normalizeString(payload.company);
+
+    if (!company) {
+      errors.company = "Company must be a non-empty string";
+    } else {
+      updates.company = company;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "role")) {
+    const role = normalizeString(payload.role);
+
+    if (!role) {
+      errors.role = "Role must be a non-empty string";
+    } else {
+      updates.role = role;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "currentStatus")) {
+    const currentStatus = normalizeString(payload.currentStatus);
+
+    if (!APPLICATION_STATUSES.includes(currentStatus)) {
+      errors.currentStatus = "Current status is invalid";
+    } else {
+      updates.currentStatus = currentStatus;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "jdUrl")) {
+    const jdUrl = normalizeOptionalString(payload.jdUrl);
+
+    if (payload.jdUrl !== null && typeof payload.jdUrl !== "string") {
+      errors.jdUrl = "Job description URL must be a string or null";
+    } else if (jdUrl && !isValidUrl(jdUrl)) {
+      errors.jdUrl = "Job description URL must be a valid URL";
+    } else {
+      updates.jdUrl = jdUrl;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "source")) {
+    if (payload.source !== null && typeof payload.source !== "string") {
+      errors.source = "Source must be a string or null";
+    } else {
+      updates.source = normalizeOptionalString(payload.source);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "notes")) {
+    if (payload.notes !== null && typeof payload.notes !== "string") {
+      errors.notes = "Notes must be a string or null";
+    } else {
+      updates.notes = normalizeOptionalString(payload.notes);
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "followUpAt")) {
+    const followUpAt = parseOptionalDate(payload.followUpAt);
+
+    if (payload.followUpAt !== null && payload.followUpAt !== "" && !followUpAt) {
+      errors.followUpAt = "Follow-up date must be a valid date or null";
+    } else {
+      updates.followUpAt = followUpAt;
+    }
+  }
+
+  if (Object.keys(updates).length === 0 && Object.keys(errors).length === 0) {
+    errors.body = "At least one application field must be provided";
+  }
+
+  return {
+    value: updates,
     errors,
   };
 }

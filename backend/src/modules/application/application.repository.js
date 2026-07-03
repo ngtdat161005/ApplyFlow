@@ -46,3 +46,36 @@ export async function findApplicationsByUser(userId, options) {
 
   return getApplicationsCollection().find(filter).sort(sort).toArray();
 }
+
+export async function findApplicationByIdForUser(userId, applicationId) {
+  return getApplicationsCollection().findOne({
+    _id: applicationId,
+    userId,
+  });
+}
+
+export async function updateApplicationByIdForUser(userId, applicationId, updates) {
+  const result = await getApplicationsCollection().findOneAndUpdate(
+    {
+      _id: applicationId,
+      userId,
+    },
+    {
+      $set: updates,
+    },
+    {
+      returnDocument: "after",
+    },
+  );
+
+  return result?.value ?? result;
+}
+
+export async function deleteApplicationByIdForUser(userId, applicationId) {
+  const result = await getApplicationsCollection().deleteOne({
+    _id: applicationId,
+    userId,
+  });
+
+  return result.deletedCount === 1;
+}
