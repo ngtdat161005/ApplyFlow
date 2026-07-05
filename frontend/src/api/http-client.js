@@ -2,6 +2,7 @@ import { getStoredAccessToken } from '../utils/storage.utils.js';
 
 const DEFAULT_API_BASE_URL = '';
 const API_PROXY_PREFIX = '/api';
+const API_PROXY_PATHS = ['/applications', '/dashboard'];
 
 function normalizeBaseUrl(baseUrl) {
   return (baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
@@ -26,7 +27,7 @@ function buildUrl(path) {
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
-  if (!API_BASE_URL && normalizedPath.startsWith('/applications')) {
+  if (!API_BASE_URL && API_PROXY_PATHS.some((apiPath) => normalizedPath.startsWith(apiPath))) {
     return `${API_PROXY_PREFIX}${normalizedPath}`;
   }
 
