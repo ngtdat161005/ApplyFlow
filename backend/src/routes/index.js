@@ -2,6 +2,7 @@ import { Router } from "express";
 import { config } from "../config/env.js";
 import applicationRouter from "./application.route.js";
 import authRouter from "./auth.route.js";
+import dashboardRouter from "./dashboard.route.js";
 import eventRouter from "./event.route.js";
 
 const router = Router();
@@ -17,5 +18,6 @@ router.get("/health", (_req, res) => {
 router.use("/auth", authRouter);
 router.use("/applications", applicationRouter);
 router.use("/applications/:applicationId/events", eventRouter);
+router.use("/dashboard", dashboardRouter);
 
 export default router;

@@ -1,3 +1,10 @@
-// Dashboard controller will be implemented in Task 13.
+import { getDashboardSummary } from "./dashboard.service.js";
 
-export {};
+export async function summary(req, res) {
+  const dashboard = await getDashboardSummary(req.user.id);
+
+  res.status(200).json({
+    success: true,
+    dashboard,
+  });
+}
