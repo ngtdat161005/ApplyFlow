@@ -47,6 +47,16 @@ export async function findApplicationsByUser(userId, options) {
   return getApplicationsCollection().find(filter).sort(sort).toArray();
 }
 
+export async function findAllApplicationsByUser(userId) {
+  return getApplicationsCollection()
+    .find({ userId })
+    .sort({
+      updatedAt: -1,
+      _id: -1,
+    })
+    .toArray();
+}
+
 export async function findApplicationByIdForUser(userId, applicationId) {
   return getApplicationsCollection().findOne({
     _id: applicationId,

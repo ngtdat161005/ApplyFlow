@@ -21,6 +21,16 @@ export async function findEventsByApplicationForUser(userId, applicationId) {
   return sortTimelineEvents(events);
 }
 
+export async function findEventsByUser(userId) {
+  const events = await getApplicationEventsCollection()
+    .find({
+      userId,
+    })
+    .toArray();
+
+  return sortTimelineEvents(events);
+}
+
 export async function updateEventByIdForUser(userId, applicationId, eventId, updates) {
   const result = await getApplicationEventsCollection().findOneAndUpdate(
     {
