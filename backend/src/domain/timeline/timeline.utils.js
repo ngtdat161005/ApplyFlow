@@ -1,4 +1,4 @@
-function toDate(value) {
+export function toDate(value) {
   if (!value) {
     return null;
   }
@@ -23,8 +23,14 @@ function compareObjectIds(firstId, secondId) {
   return firstId?.toString?.().localeCompare(secondId?.toString?.() ?? "") ?? 0;
 }
 
-export function getEventEffectiveDate(event) {
-  return toDate(event.occurredAt) ?? toDate(event.scheduledAt) ?? toDate(event.createdAt);
+export function getEventEffectiveDate(event, options = {}) {
+  const { includeCreatedAt = true } = options;
+
+  return (
+    toDate(event.occurredAt) ??
+    toDate(event.scheduledAt) ??
+    (includeCreatedAt ? toDate(event.createdAt) : null)
+  );
 }
 
 export function compareTimelineEvents(firstEvent, secondEvent) {
