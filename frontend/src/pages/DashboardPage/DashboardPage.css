@@ -1,0 +1,229 @@
+.dashboard-page {
+  gap: 22px;
+}
+
+.dashboard-summary-grid,
+.dashboard-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-grid {
+  align-items: start;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.dashboard-summary-card {
+  background: #ffffff;
+  border: 1px solid #dde3d8;
+  border-left: 5px solid #7f9b8d;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(20 33 31 / 7%);
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 18px;
+}
+
+.dashboard-summary-card-total {
+  border-left-color: #14211f;
+}
+
+.dashboard-summary-card-applied {
+  border-left-color: #3a7db3;
+}
+
+.dashboard-summary-card-in_process {
+  border-left-color: #b38c21;
+}
+
+.dashboard-summary-card-offer {
+  border-left-color: #3d8a43;
+}
+
+.dashboard-summary-card-rejected {
+  border-left-color: #b34b45;
+}
+
+.dashboard-summary-card-withdrawn {
+  border-left-color: #766493;
+}
+
+.dashboard-summary-card span,
+.dashboard-status-row span,
+.dashboard-meta dt {
+  color: #65716d;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dashboard-summary-card strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.dashboard-panel {
+  min-width: 0;
+}
+
+.dashboard-panel-header,
+.dashboard-list-item-main {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.dashboard-panel-header h3,
+.dashboard-panel-header p,
+.dashboard-list-item h4,
+.dashboard-list-item p,
+.dashboard-empty-state p {
+  margin: 0;
+}
+
+.dashboard-status-grid,
+.dashboard-list {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-status-row {
+  align-items: center;
+  border: 1px solid #e4eadf;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.dashboard-status-row strong {
+  font-size: 20px;
+}
+
+.dashboard-status-dot {
+  border-radius: 999px;
+  height: 10px;
+  width: 10px;
+}
+
+.dashboard-status-dot-saved {
+  background: #87919a;
+}
+
+.dashboard-status-dot-applied {
+  background: #3a7db3;
+}
+
+.dashboard-status-dot-in_process {
+  background: #b38c21;
+}
+
+.dashboard-status-dot-offer {
+  background: #3d8a43;
+}
+
+.dashboard-status-dot-rejected {
+  background: #b34b45;
+}
+
+.dashboard-status-dot-withdrawn {
+  background: #766493;
+}
+
+.dashboard-list-item {
+  border: 1px solid #dde3d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.dashboard-list-item h4 {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-list-item p,
+.dashboard-list-context,
+.dashboard-list-item time,
+.dashboard-meta dd {
+  color: #5c6965;
+}
+
+.dashboard-list-item time {
+  font-size: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dashboard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  margin: 0;
+}
+
+.dashboard-meta div {
+  display: grid;
+  gap: 2px;
+}
+
+.dashboard-meta dd {
+  margin: 0;
+}
+
+.dashboard-empty-state {
+  background: #fbfcf8;
+  border: 1px solid #dde3d8;
+  border-radius: 8px;
+  color: #5c6965;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.dashboard-empty-state-positive {
+  background: #eef8e7;
+  border-color: #b9dca5;
+  color: #285b2b;
+}
+
+.dashboard-attention-item {
+  background: #fffdf7;
+  border-color: #e4dba8;
+}
+
+.dashboard-attention-message {
+  border-left: 3px solid #d7e36c;
+  padding-left: 10px;
+}
+
+@media (max-width: 960px) {
+  .dashboard-summary-grid,
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-summary-grid,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-list-item-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-list-item time {
+    text-align: left;
+  }
+}
