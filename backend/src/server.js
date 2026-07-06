@@ -2,7 +2,8 @@ import { createApp } from "./app.js";
 import { config } from "./config/env.js";
 import { closeMongoConnection, connectToMongo } from "./config/mongodb.js";
 import { logger } from "./shared/logger.js";
-
+import dns from 'dns'
+dns.setServers(['1.1.1.1', '8.8.8.8'])
 async function startServer() {
   await connectToMongo();
 

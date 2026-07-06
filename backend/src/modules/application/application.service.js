@@ -1,5 +1,6 @@
 import { NotFoundError, UnauthorizedError } from "../../domain/shared/domain-errors.js";
 import { toObjectId } from "../../utils/object-id.utils.js";
+import { deleteEventsByApplicationForUser } from "../event/event.repository.js";
 import { mapApplicationToResponse, mapApplicationsToResponse } from "./application.mapper.js";
 import {
   createApplicationDocument,
@@ -29,8 +30,8 @@ function getApplicationObjectId(applicationId) {
   return applicationObjectId;
 }
 
-async function deleteApplicationEventsForApplication(_userId, _applicationId) {
-  // Event cascade delete will be added when the event repository is implemented.
+async function deleteApplicationEventsForApplication(userObjectId, applicationObjectId) {
+  await deleteEventsByApplicationForUser(userObjectId, applicationObjectId);
 }
 
 export async function createApplication(userId, payload) {
@@ -94,11 +95,17 @@ export async function updateApplication(userId, applicationId, updates) {
 export async function deleteApplication(userId, applicationId) {
   const userObjectId = getAuthenticatedUserObjectId(userId);
   const applicationObjectId = getApplicationObjectId(applicationId);
+  const application = await findApplicationByIdForUser(userObjectId, applicationObjectId);
+
+  if (!application) {
+    throw new NotFoundError("Application not found");
+  }
+
+  await deleteApplicationEventsForApplication(userObjectId, applicationObjectId);
+
   const deleted = await deleteApplicationByIdForUser(userObjectId, applicationObjectId);
 
   if (!deleted) {
     throw new NotFoundError("Application not found");
   }
-
-  await deleteApplicationEventsForApplication(userObjectId, applicationObjectId);
 }

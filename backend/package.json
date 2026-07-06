@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "check:attention": "node scripts/check-attention-domain.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
