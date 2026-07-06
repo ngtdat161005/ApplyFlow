@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import { APPLICATION_STATUS_OPTIONS } from '../../../constants/status.js';
-import { getErrorDetails, getErrorMessage } from '../../auth/auth.utils.js';
+import {
+  getErrorDetails,
+  getErrorFieldErrors,
+  getErrorMessage,
+} from '../../auth/auth.utils.js';
 
 const INITIAL_FORM_VALUES = {
   company: '',
@@ -12,6 +16,16 @@ const INITIAL_FORM_VALUES = {
   notes: '',
   followUpAt: '',
 };
+
+const APPLICATION_FIELD_NAMES = [
+  'company',
+  'role',
+  'currentStatus',
+  'jdUrl',
+  'source',
+  'notes',
+  'followUpAt',
+];
 
 function toDateTimeLocalValue(value) {
   if (!value) {
@@ -52,21 +66,47 @@ function getOptionalString(value) {
   return normalizedValue || null;
 }
 
+function toIsoDateTime(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+}
+
 function buildApplicationPayload(values, mode) {
+  const followUpAt = toIsoDateTime(values.followUpAt);
+
+  if (values.followUpAt && !followUpAt) {
+    return {
+      error: 'Follow-up date must be valid.',
+      fieldErrors: {
+        followUpAt: 'Follow-up date must be valid.',
+      },
+    };
+  }
+
   const payload = {
     company: values.company.trim(),
     role: values.role.trim(),
     currentStatus: values.currentStatus,
   };
-  const followUpAt = values.followUpAt ? new Date(values.followUpAt).toISOString() : null;
 
   if (mode === 'edit') {
     return {
-      ...payload,
-      jdUrl: getOptionalString(values.jdUrl),
-      source: getOptionalString(values.source),
-      notes: getOptionalString(values.notes),
-      followUpAt,
+      payload: {
+        ...payload,
+        jdUrl: getOptionalString(values.jdUrl),
+        source: getOptionalString(values.source),
+        notes: getOptionalString(values.notes),
+        followUpAt,
+      },
     };
   }
 
@@ -86,7 +126,7 @@ function buildApplicationPayload(values, mode) {
     payload.followUpAt = followUpAt;
   }
 
-  return payload;
+  return { payload };
 }
 
 export function ApplicationForm({
@@ -97,12 +137,16 @@ export function ApplicationForm({
   onSubmit,
 }) {
   const [formValues, setFormValues] = useState(() => getInitialFormValues(application));
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     setFormValues(getInitialFormValues(application));
+    setFieldErrors({});
+    setFormError('');
+    setFormErrorDetails([]);
   }, [application]);
 
   function handleChange(event) {
@@ -112,20 +156,42 @@ export function ApplicationForm({
       ...currentValues,
       [name]: value,
     }));
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: '',
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
 
+    const validationErrors = {};
+
     if (!formValues.company.trim()) {
-      setFormError('Company is required.');
-      return;
+      validationErrors.company = 'Company is required.';
     }
 
     if (!formValues.role.trim()) {
-      setFormError('Role is required.');
+      validationErrors.role = 'Role is required.';
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      setFormError('Please fix the highlighted fields.');
+      return;
+    }
+
+    const { error, fieldErrors: payloadFieldErrors = {}, payload } = buildApplicationPayload(
+      formValues,
+      mode,
+    );
+
+    if (error) {
+      setFieldErrors(payloadFieldErrors);
+      setFormError(error);
       return;
     }
 
@@ -134,20 +200,26 @@ export function ApplicationForm({
     try {
       const saveApplication = onSubmit || onCreated;
 
-      await saveApplication(buildApplicationPayload(formValues, mode));
+      await saveApplication(payload);
 
       if (mode === 'create') {
         setFormValues(INITIAL_FORM_VALUES);
       }
     } catch (error) {
+      const nextFieldErrors = getErrorFieldErrors(error);
+
+      setFieldErrors(nextFieldErrors);
       setFormError(getErrorMessage(error, 'Unable to save application.'));
-      setFormErrorDetails(getErrorDetails(error));
+      setFormErrorDetails(
+        getErrorDetails(error, { excludeFields: APPLICATION_FIELD_NAMES }),
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   const submitLabel = mode === 'edit' ? 'Save application' : 'Create application';
+  const submittingLabel = mode === 'edit' ? 'Saving...' : 'Creating...';
 
   return (
     <form className="application-form" noValidate onSubmit={handleSubmit}>
@@ -155,28 +227,33 @@ export function ApplicationForm({
         <label>
           Company
           <input
+            aria-invalid={Boolean(fieldErrors.company)}
             disabled={isSubmitting}
             name="company"
             onChange={handleChange}
             placeholder="OpenAI"
             value={formValues.company}
           />
+          {fieldErrors.company ? <span className="field-error">{fieldErrors.company}</span> : null}
         </label>
 
         <label>
           Role
           <input
+            aria-invalid={Boolean(fieldErrors.role)}
             disabled={isSubmitting}
             name="role"
             onChange={handleChange}
             placeholder="Frontend Intern"
             value={formValues.role}
           />
+          {fieldErrors.role ? <span className="field-error">{fieldErrors.role}</span> : null}
         </label>
 
         <label>
           Status
           <select
+            aria-invalid={Boolean(fieldErrors.currentStatus)}
             disabled={isSubmitting}
             name="currentStatus"
             onChange={handleChange}
@@ -188,11 +265,15 @@ export function ApplicationForm({
               </option>
             ))}
           </select>
+          {fieldErrors.currentStatus ? (
+            <span className="field-error">{fieldErrors.currentStatus}</span>
+          ) : null}
         </label>
 
         <label>
           Job URL
           <input
+            aria-invalid={Boolean(fieldErrors.jdUrl)}
             disabled={isSubmitting}
             inputMode="url"
             name="jdUrl"
@@ -200,34 +281,42 @@ export function ApplicationForm({
             placeholder="https://example.com/job"
             value={formValues.jdUrl}
           />
+          {fieldErrors.jdUrl ? <span className="field-error">{fieldErrors.jdUrl}</span> : null}
         </label>
 
         <label>
           Source
           <input
+            aria-invalid={Boolean(fieldErrors.source)}
             disabled={isSubmitting}
             name="source"
             onChange={handleChange}
             placeholder="LinkedIn"
             value={formValues.source}
           />
+          {fieldErrors.source ? <span className="field-error">{fieldErrors.source}</span> : null}
         </label>
 
         <label>
           Follow-up date
           <input
+            aria-invalid={Boolean(fieldErrors.followUpAt)}
             disabled={isSubmitting}
             name="followUpAt"
             onChange={handleChange}
             type="datetime-local"
             value={formValues.followUpAt}
           />
+          {fieldErrors.followUpAt ? (
+            <span className="field-error">{fieldErrors.followUpAt}</span>
+          ) : null}
         </label>
       </div>
 
       <label>
         Notes
         <textarea
+          aria-invalid={Boolean(fieldErrors.notes)}
           disabled={isSubmitting}
           name="notes"
           onChange={handleChange}
@@ -235,6 +324,7 @@ export function ApplicationForm({
           rows="4"
           value={formValues.notes}
         />
+        {fieldErrors.notes ? <span className="field-error">{fieldErrors.notes}</span> : null}
       </label>
 
       {formError ? (
@@ -252,7 +342,7 @@ export function ApplicationForm({
 
       <div className="application-form-actions">
         <button disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Saving...' : submitLabel}
+          {isSubmitting ? submittingLabel : submitLabel}
         </button>
         <button disabled={isSubmitting} type="button" onClick={onCancel}>
           Cancel

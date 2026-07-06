@@ -48,11 +48,37 @@ async function readJsonResponse(response) {
   }
 }
 
+function getReadableErrorMessages(value) {
+  if (value === null || value === undefined || value === '') {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(getReadableErrorMessages);
+  }
+
+  if (typeof value === 'object') {
+    const nestedMessage = getReadableErrorMessages(value.message);
+
+    if (nestedMessage.length > 0) {
+      return nestedMessage;
+    }
+
+    return Object.values(value).flatMap(getReadableErrorMessages);
+  }
+
+  return [String(value)];
+}
+
+function getFirstReadableError(value) {
+  return getReadableErrorMessages(value)[0] || '';
+}
+
 function getErrorMessage(payload, response) {
   if (payload && typeof payload === 'object') {
     return (
-      payload.error?.message ||
-      payload.message ||
+      getFirstReadableError(payload.error?.message) ||
+      getFirstReadableError(payload.message) ||
       response.statusText ||
       `Request failed with status ${response.status}`
     );

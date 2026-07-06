@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../features/auth/auth.store.js';
-import { getErrorDetails, getErrorMessage } from '../../features/auth/auth.utils.js';
+import {
+  getErrorDetails,
+  getErrorFieldErrors,
+  getErrorMessage,
+} from '../../features/auth/auth.utils.js';
+
+const LOGIN_FIELD_NAMES = ['email', 'password'];
 
 function getRedirectTarget(location) {
   const from = location.state?.from;
@@ -23,6 +29,7 @@ export default function LoginPage() {
     email: location.state?.email || '',
     password: '',
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,10 +41,15 @@ export default function LoginPage() {
       ...currentValues,
       [name]: value,
     }));
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: '',
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
     setIsSubmitting(true);
@@ -46,8 +58,13 @@ export default function LoginPage() {
       await login(formValues);
       navigate(getRedirectTarget(location), { replace: true });
     } catch (error) {
+      const nextFieldErrors = getErrorFieldErrors(error);
+
+      setFieldErrors(nextFieldErrors);
       setFormError(getErrorMessage(error, 'Login failed.'));
-      setFormErrorDetails(getErrorDetails(error));
+      setFormErrorDetails(
+        getErrorDetails(error, { excludeFields: LOGIN_FIELD_NAMES }),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -84,6 +101,7 @@ export default function LoginPage() {
             Email
             <input
               autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.email)}
               disabled={isSubmitting}
               name="email"
               onChange={handleChange}
@@ -92,11 +110,13 @@ export default function LoginPage() {
               type="email"
               value={formValues.email}
             />
+            {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
           </label>
           <label>
             Password
             <input
               autoComplete="current-password"
+              aria-invalid={Boolean(fieldErrors.password)}
               disabled={isSubmitting}
               name="password"
               onChange={handleChange}
@@ -105,6 +125,7 @@ export default function LoginPage() {
               type="password"
               value={formValues.password}
             />
+            {fieldErrors.password ? <span className="field-error">{fieldErrors.password}</span> : null}
           </label>
           <button disabled={isSubmitting} type="submit">
             {isSubmitting ? 'Logging in...' : 'Login'}

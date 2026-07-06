@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../features/auth/auth.store.js';
-import { getErrorDetails, getErrorMessage } from '../../features/auth/auth.utils.js';
+import {
+  getErrorDetails,
+  getErrorFieldErrors,
+  getErrorMessage,
+} from '../../features/auth/auth.utils.js';
+
+const REGISTER_FIELD_NAMES = ['displayName', 'email', 'password'];
 
 export default function RegisterPage() {
   const { authError, register } = useAuth();
@@ -13,6 +19,7 @@ export default function RegisterPage() {
     email: '',
     password: '',
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -23,10 +30,15 @@ export default function RegisterPage() {
       ...currentValues,
       [name]: value,
     }));
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: '',
+    }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
     setIsSubmitting(true);
@@ -47,8 +59,13 @@ export default function RegisterPage() {
         },
       });
     } catch (error) {
+      const nextFieldErrors = getErrorFieldErrors(error);
+
+      setFieldErrors(nextFieldErrors);
       setFormError(getErrorMessage(error, 'Registration failed.'));
-      setFormErrorDetails(getErrorDetails(error));
+      setFormErrorDetails(
+        getErrorDetails(error, { excludeFields: REGISTER_FIELD_NAMES }),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -79,6 +96,7 @@ export default function RegisterPage() {
             Display name
             <input
               autoComplete="name"
+              aria-invalid={Boolean(fieldErrors.displayName)}
               disabled={isSubmitting}
               name="displayName"
               onChange={handleChange}
@@ -87,11 +105,15 @@ export default function RegisterPage() {
               type="text"
               value={formValues.displayName}
             />
+            {fieldErrors.displayName ? (
+              <span className="field-error">{fieldErrors.displayName}</span>
+            ) : null}
           </label>
           <label>
             Email
             <input
               autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.email)}
               disabled={isSubmitting}
               name="email"
               onChange={handleChange}
@@ -100,11 +122,13 @@ export default function RegisterPage() {
               type="email"
               value={formValues.email}
             />
+            {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
           </label>
           <label>
             Password
             <input
               autoComplete="new-password"
+              aria-invalid={Boolean(fieldErrors.password)}
               disabled={isSubmitting}
               minLength={8}
               name="password"
@@ -114,6 +138,7 @@ export default function RegisterPage() {
               type="password"
               value={formValues.password}
             />
+            {fieldErrors.password ? <span className="field-error">{fieldErrors.password}</span> : null}
           </label>
           <button disabled={isSubmitting} type="submit">
             {isSubmitting ? 'Registering...' : 'Register'}
