@@ -83,7 +83,7 @@ async function checkErrorMiddleware() {
   assert.equal(domainResponse.statusCode, 400);
   assert.equal(domainResponse.body.message, "Application ID must be a valid ObjectId");
   assert.equal(domainResponse.body.errors, undefined);
-  assert.equal(typeof domainResponse.body.stack, "string");
+  assert.equal(domainResponse.body.stack, undefined);
 
   const validationResponse = await runMiddleware(
     new ValidationError({
@@ -96,7 +96,7 @@ async function checkErrorMiddleware() {
   assert.deepEqual(validationResponse.body.errors, {
     company: "Company is required",
   });
-  assert.equal(typeof validationResponse.body.stack, "string");
+  assert.equal(validationResponse.body.stack, undefined);
 
   const statusFallbackError = new Error("Unauthorized request");
   statusFallbackError.status = 401;
@@ -104,6 +104,7 @@ async function checkErrorMiddleware() {
 
   assert.equal(statusFallbackResponse.statusCode, 401);
   assert.equal(statusFallbackResponse.body.message, "Unauthorized request");
+  assert.equal(statusFallbackResponse.body.stack, undefined);
 
   const originalConsoleError = console.error;
   console.error = () => {};
@@ -117,6 +118,7 @@ async function checkErrorMiddleware() {
 
   assert.equal(unexpectedResponse.statusCode, 500);
   assert.equal(unexpectedResponse.body.message, "Unexpected development failure");
+  assert.equal(unexpectedResponse.body.errors, undefined);
   assert.equal(typeof unexpectedResponse.body.stack, "string");
 
   const notFoundResponse = createMockResponse();
@@ -155,7 +157,11 @@ function checkProductionErrorMiddleware() {
         return this;
       },
     };
-    errorMiddleware(new Error("Sensitive database detail"), {}, response, () => {});
+    const error = new Error("Sensitive database detail");
+    error.errors = {
+      query: "Sensitive query detail",
+    };
+    errorMiddleware(error, {}, response, () => {});
     process.stdout.write(JSON.stringify(response));
   `;
   const output = execFileSync(process.execPath, ["--input-type=module", "--eval", script], {
