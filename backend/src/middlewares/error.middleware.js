@@ -3,10 +3,7 @@ import { logger } from "../shared/logger.js";
 
 export function notFoundHandler(req, res) {
   res.status(404).json({
-    success: false,
-    error: {
-      message: `Route not found: ${req.method} ${req.originalUrl}`,
-    },
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 }
 
@@ -23,11 +20,8 @@ export function errorMiddleware(err, _req, res, _next) {
   }
 
   res.status(statusCode).json({
-    success: false,
-    error: {
-      message,
-      ...(err.errors ? { errors: err.errors } : {}),
-      ...(config.nodeEnv !== "production" && err.stack ? { stack: err.stack } : {}),
-    },
+    message,
+    ...(err.errors ? { errors: err.errors } : {}),
+    ...(config.nodeEnv !== "production" && err.stack ? { stack: err.stack } : {}),
   });
 }

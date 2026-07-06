@@ -1,15 +1,7 @@
-import { ObjectId } from "mongodb";
 import { getUsersCollection } from "../../db/collections.js";
+import { toObjectId } from "../../utils/object-id.utils.js";
 
 let usersEmailIndexPromise;
-
-function toObjectId(id) {
-  if (!ObjectId.isValid(id)) {
-    return null;
-  }
-
-  return new ObjectId(id);
-}
 
 async function ensureUsersEmailIndex() {
   if (!usersEmailIndexPromise) {

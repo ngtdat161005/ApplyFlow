@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "check:attention": "node scripts/check-attention-domain.js"
+    "check:attention": "node scripts/check-attention-domain.js",
+    "check:backend-hardening": "node scripts/check-backend-hardening.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
