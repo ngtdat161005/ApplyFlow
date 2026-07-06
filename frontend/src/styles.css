@@ -392,6 +392,11 @@ textarea:disabled {
   gap: 14px;
 }
 
+.application-list-item {
+  display: grid;
+  gap: 12px;
+}
+
 .application-card {
   display: grid;
   gap: 14px;
@@ -455,6 +460,23 @@ textarea:disabled {
   font-weight: 700;
 }
 
+.application-card-actions button,
+.application-overview-actions button {
+  background: #ffffff;
+  border: 1px solid #cbd5ca;
+  border-radius: 8px;
+  color: #315d4d;
+  cursor: pointer;
+  padding: 9px 12px;
+}
+
+.application-card-actions button:last-child,
+.application-overview-actions button:last-child,
+.application-delete-confirm .application-form-actions button:first-child {
+  border-color: #efb39f;
+  color: #7f2415;
+}
+
 .application-detail-page {
   gap: 20px;
 }
@@ -465,6 +487,14 @@ textarea:disabled {
 
 .application-overview {
   gap: 16px;
+}
+
+.application-overview-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .application-overview-header,
@@ -648,6 +678,15 @@ textarea:disabled {
 }
 
 .event-delete-confirm {
+  background: #fff9f7;
+  border: 1px solid #efb39f;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.application-delete-confirm {
   background: #fff9f7;
   border: 1px solid #efb39f;
   border-radius: 8px;

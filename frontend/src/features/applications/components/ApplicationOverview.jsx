@@ -17,7 +17,15 @@ function formatDate(value) {
   }).format(date);
 }
 
-export function ApplicationOverview({ application }) {
+export function ApplicationOverview({
+  application,
+  isConfirmingDelete = false,
+  isDeleting = false,
+  onCancelDelete,
+  onConfirmDelete,
+  onEdit,
+  onRequestDelete,
+}) {
   const followUpAt = formatDate(application.followUpAt);
   const createdAt = formatDate(application.createdAt);
   const updatedAt = formatDate(application.updatedAt);
@@ -30,7 +38,15 @@ export function ApplicationOverview({ application }) {
           <h3>{application.company}</h3>
           <p>{application.role}</p>
         </div>
-        <StatusBadge status={application.currentStatus} />
+        <div className="application-overview-actions">
+          <StatusBadge status={application.currentStatus} />
+          <button disabled={isDeleting} type="button" onClick={onEdit}>
+            Edit
+          </button>
+          <button disabled={isDeleting} type="button" onClick={onRequestDelete}>
+            Delete
+          </button>
+        </div>
       </div>
 
       <dl className="application-detail-meta">
@@ -74,6 +90,20 @@ export function ApplicationOverview({ application }) {
         <div className="application-detail-notes">
           <h4>Notes</h4>
           <p>{application.notes}</p>
+        </div>
+      ) : null}
+
+      {isConfirmingDelete ? (
+        <div className="application-delete-confirm" role="alert">
+          <p>Delete this application and its timeline events?</p>
+          <div className="application-form-actions">
+            <button disabled={isDeleting} type="button" onClick={onConfirmDelete}>
+              {isDeleting ? 'Deleting...' : 'Delete application'}
+            </button>
+            <button disabled={isDeleting} type="button" onClick={onCancelDelete}>
+              Cancel
+            </button>
+          </div>
         </div>
       ) : null}
     </section>

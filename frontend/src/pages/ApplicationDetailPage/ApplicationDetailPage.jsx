@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { getApplication, getApplicationFromResponse } from '../../api/application.api.js';
+import {
+  deleteApplication,
+  getApplication,
+  getApplicationFromResponse,
+  updateApplication,
+} from '../../api/application.api.js';
 import {
   createApplicationEvent,
   deleteApplicationEvent,
@@ -11,15 +16,21 @@ import {
   updateApplicationEvent,
 } from '../../api/event.api.js';
 import { ApplicationOverview } from '../../features/applications/components/ApplicationOverview.jsx';
+import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
 import { EventForm } from '../../features/events/components/EventForm.jsx';
 import { EventTimeline } from '../../features/events/components/EventTimeline.jsx';
 import { getErrorMessage } from '../../features/auth/auth.utils.js';
 
 export default function ApplicationDetailPage() {
   const { applicationId } = useParams();
+  const navigate = useNavigate();
   const [application, setApplication] = useState(null);
+  const [applicationActionError, setApplicationActionError] = useState('');
   const [applicationError, setApplicationError] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [isApplicationDeleteConfirmOpen, setIsApplicationDeleteConfirmOpen] = useState(false);
+  const [isApplicationDeleting, setIsApplicationDeleting] = useState(false);
+  const [isApplicationEditFormOpen, setIsApplicationEditFormOpen] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState('');
   const [editingEventId, setEditingEventId] = useState('');
   const [events, setEvents] = useState([]);
@@ -97,6 +108,40 @@ export default function ApplicationDetailPage() {
     return createdEvent;
   }
 
+  async function handleUpdateApplication(payload) {
+    const response = await updateApplication(applicationId, payload);
+    const updatedApplication = getApplicationFromResponse(response);
+
+    if (!updatedApplication) {
+      throw new Error('Update application response did not include an application.');
+    }
+
+    setApplication(updatedApplication);
+    setApplicationActionError('');
+    setIsApplicationDeleteConfirmOpen(false);
+    setIsApplicationEditFormOpen(false);
+
+    return updatedApplication;
+  }
+
+  async function handleDeleteApplication() {
+    if (!application) {
+      return;
+    }
+
+    setIsApplicationDeleting(true);
+    setApplicationActionError('');
+
+    try {
+      await deleteApplication(applicationId);
+      navigate('/applications', { replace: true });
+    } catch (error) {
+      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+    } finally {
+      setIsApplicationDeleting(false);
+    }
+  }
+
   async function handleUpdateEvent(event, payload) {
     const response = await updateApplicationEvent(applicationId, event._id, payload);
     const updatedEvent = getEventFromResponse(response);
@@ -162,7 +207,54 @@ export default function ApplicationDetailPage() {
         </section>
       ) : null}
 
-      {application ? <ApplicationOverview application={application} /> : null}
+      {application ? (
+        <>
+          <ApplicationOverview
+            application={application}
+            isConfirmingDelete={isApplicationDeleteConfirmOpen}
+            isDeleting={isApplicationDeleting}
+            onCancelDelete={() => setIsApplicationDeleteConfirmOpen(false)}
+            onConfirmDelete={handleDeleteApplication}
+            onEdit={() => {
+              setApplicationActionError('');
+              setIsApplicationDeleteConfirmOpen(false);
+              setIsApplicationEditFormOpen(true);
+              setIsCreateFormOpen(false);
+              setEditingEventId('');
+              setPendingDeleteEventId('');
+            }}
+            onRequestDelete={() => {
+              setApplicationActionError('');
+              setIsApplicationEditFormOpen(false);
+              setEditingEventId('');
+              setIsCreateFormOpen(false);
+              setPendingDeleteEventId('');
+              setIsApplicationDeleteConfirmOpen(true);
+            }}
+          />
+
+          {applicationActionError ? (
+            <div className="auth-alert" role="alert">
+              <p>{applicationActionError}</p>
+            </div>
+          ) : null}
+
+          {isApplicationEditFormOpen ? (
+            <section className="application-panel" aria-label="Edit application">
+              <div className="application-panel-header">
+                <h3>Edit application</h3>
+                <p>Update company, role, status, source, notes, and follow-up date.</p>
+              </div>
+              <ApplicationForm
+                application={application}
+                mode="edit"
+                onCancel={() => setIsApplicationEditFormOpen(false)}
+                onSubmit={handleUpdateApplication}
+              />
+            </section>
+          ) : null}
+        </>
+      ) : null}
 
       <section className="application-panel event-panel" aria-labelledby="event-timeline-title">
         <div className="event-panel-header">
@@ -176,6 +268,7 @@ export default function ApplicationDetailPage() {
             disabled={!application || isEventsLoading}
             type="button"
             onClick={() => {
+              setIsApplicationEditFormOpen(false);
               setEditingEventId('');
               setPendingDeleteEventId('');
               setIsCreateFormOpen((isOpen) => !isOpen);
@@ -203,11 +296,17 @@ export default function ApplicationDetailPage() {
           onCancelEdit={() => setEditingEventId('')}
           onConfirmDelete={handleDeleteEvent}
           onEdit={(event) => {
+            setIsApplicationEditFormOpen(false);
             setIsCreateFormOpen(false);
+            setApplicationActionError('');
+            setIsApplicationDeleteConfirmOpen(false);
             setPendingDeleteEventId('');
             setEditingEventId(event._id);
           }}
           onRequestDelete={(event) => {
+            setIsApplicationEditFormOpen(false);
+            setApplicationActionError('');
+            setIsApplicationDeleteConfirmOpen(false);
             setEditingEventId('');
             setPendingDeleteEventId(event._id);
           }}

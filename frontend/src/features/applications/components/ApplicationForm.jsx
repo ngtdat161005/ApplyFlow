@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { APPLICATION_STATUS_OPTIONS } from '../../../constants/status.js';
 import { getErrorDetails, getErrorMessage } from '../../auth/auth.utils.js';
@@ -13,12 +13,62 @@ const INITIAL_FORM_VALUES = {
   followUpAt: '',
 };
 
-function buildCreatePayload(values) {
+function toDateTimeLocalValue(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const timezoneOffset = date.getTimezoneOffset() * 60000;
+  const localDate = new Date(date.getTime() - timezoneOffset);
+
+  return localDate.toISOString().slice(0, 16);
+}
+
+function getInitialFormValues(application) {
+  if (!application) {
+    return INITIAL_FORM_VALUES;
+  }
+
+  return {
+    company: application.company || '',
+    role: application.role || '',
+    currentStatus: application.currentStatus || 'saved',
+    jdUrl: application.jdUrl || '',
+    source: application.source || '',
+    notes: application.notes || '',
+    followUpAt: toDateTimeLocalValue(application.followUpAt),
+  };
+}
+
+function getOptionalString(value) {
+  const normalizedValue = value.trim();
+
+  return normalizedValue || null;
+}
+
+function buildApplicationPayload(values, mode) {
   const payload = {
     company: values.company.trim(),
     role: values.role.trim(),
     currentStatus: values.currentStatus,
   };
+  const followUpAt = values.followUpAt ? new Date(values.followUpAt).toISOString() : null;
+
+  if (mode === 'edit') {
+    return {
+      ...payload,
+      jdUrl: getOptionalString(values.jdUrl),
+      source: getOptionalString(values.source),
+      notes: getOptionalString(values.notes),
+      followUpAt,
+    };
+  }
 
   if (values.jdUrl.trim()) {
     payload.jdUrl = values.jdUrl.trim();
@@ -33,17 +83,27 @@ function buildCreatePayload(values) {
   }
 
   if (values.followUpAt) {
-    payload.followUpAt = new Date(values.followUpAt).toISOString();
+    payload.followUpAt = followUpAt;
   }
 
   return payload;
 }
 
-export function ApplicationForm({ onCancel, onCreated }) {
-  const [formValues, setFormValues] = useState(INITIAL_FORM_VALUES);
+export function ApplicationForm({
+  application,
+  mode = 'create',
+  onCancel,
+  onCreated,
+  onSubmit,
+}) {
+  const [formValues, setFormValues] = useState(() => getInitialFormValues(application));
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setFormValues(getInitialFormValues(application));
+  }, [application]);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -72,15 +132,22 @@ export function ApplicationForm({ onCancel, onCreated }) {
     setIsSubmitting(true);
 
     try {
-      await onCreated(buildCreatePayload(formValues));
-      setFormValues(INITIAL_FORM_VALUES);
+      const saveApplication = onSubmit || onCreated;
+
+      await saveApplication(buildApplicationPayload(formValues, mode));
+
+      if (mode === 'create') {
+        setFormValues(INITIAL_FORM_VALUES);
+      }
     } catch (error) {
-      setFormError(getErrorMessage(error, 'Unable to create application.'));
+      setFormError(getErrorMessage(error, 'Unable to save application.'));
       setFormErrorDetails(getErrorDetails(error));
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const submitLabel = mode === 'edit' ? 'Save application' : 'Create application';
 
   return (
     <form className="application-form" noValidate onSubmit={handleSubmit}>
@@ -185,7 +252,7 @@ export function ApplicationForm({ onCancel, onCreated }) {
 
       <div className="application-form-actions">
         <button disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Creating...' : 'Create application'}
+          {isSubmitting ? 'Saving...' : submitLabel}
         </button>
         <button disabled={isSubmitting} type="button" onClick={onCancel}>
           Cancel

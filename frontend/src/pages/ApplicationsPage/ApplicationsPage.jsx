@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   createApplication,
+  deleteApplication,
   getApplicationFromResponse,
   getApplicationListFromResponse,
   getApplications,
+  updateApplication,
 } from '../../api/application.api.js';
 import { ApplicationFilters } from '../../features/applications/components/ApplicationFilters.jsx';
 import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
@@ -24,10 +26,14 @@ function hasActiveFilters(filters) {
 
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState([]);
+  const [applicationActionError, setApplicationActionError] = useState('');
+  const [deletingApplicationId, setDeletingApplicationId] = useState('');
+  const [editingApplicationId, setEditingApplicationId] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [fetchError, setFetchError] = useState('');
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingDeleteApplicationId, setPendingDeleteApplicationId] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchApplications = useCallback(async () => {
@@ -57,10 +63,47 @@ export default function ApplicationsPage() {
     }
 
     setIsCreateFormOpen(false);
+    setApplicationActionError('');
+    setEditingApplicationId('');
+    setPendingDeleteApplicationId('');
     setFilters(DEFAULT_FILTERS);
     setRefreshKey((currentKey) => currentKey + 1);
 
     return createdApplication;
+  }
+
+  async function handleUpdateApplication(application, payload) {
+    const response = await updateApplication(application._id, payload);
+    const updatedApplication = getApplicationFromResponse(response);
+
+    if (!updatedApplication) {
+      throw new Error('Update application response did not include an application.');
+    }
+
+    setApplicationActionError('');
+    setEditingApplicationId('');
+    setPendingDeleteApplicationId('');
+    setRefreshKey((currentKey) => currentKey + 1);
+
+    return updatedApplication;
+  }
+
+  async function handleDeleteApplication(application) {
+    setDeletingApplicationId(application._id);
+    setApplicationActionError('');
+
+    try {
+      await deleteApplication(application._id);
+      setApplications((currentApplications) =>
+        currentApplications.filter((currentApplication) => currentApplication._id !== application._id),
+      );
+      setEditingApplicationId((currentId) => (currentId === application._id ? '' : currentId));
+      setPendingDeleteApplicationId('');
+    } catch (error) {
+      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+    } finally {
+      setDeletingApplicationId('');
+    }
   }
 
   const emptyMessage = hasActiveFilters(filters)
@@ -81,7 +124,11 @@ export default function ApplicationsPage() {
         <button
           className="button-primary"
           type="button"
-          onClick={() => setIsCreateFormOpen((isOpen) => !isOpen)}
+          onClick={() => {
+            setEditingApplicationId('');
+            setPendingDeleteApplicationId('');
+            setIsCreateFormOpen((isOpen) => !isOpen);
+          }}
         >
           {isCreateFormOpen ? 'Close form' : 'Create Application'}
         </button>
@@ -110,11 +157,30 @@ export default function ApplicationsPage() {
       </section>
 
       <ApplicationList
+        actionError={applicationActionError}
         applications={applications}
+        deletingApplicationId={deletingApplicationId}
+        editingApplicationId={editingApplicationId}
         emptyMessage={emptyMessage}
         error={fetchError}
+        isDeleteConfirmOpenFor={pendingDeleteApplicationId}
         isLoading={isLoading}
+        onCancelDelete={() => setPendingDeleteApplicationId('')}
+        onCancelEdit={() => setEditingApplicationId('')}
+        onConfirmDelete={handleDeleteApplication}
+        onEdit={(application) => {
+          setIsCreateFormOpen(false);
+          setPendingDeleteApplicationId('');
+          setApplicationActionError('');
+          setEditingApplicationId(application._id);
+        }}
+        onRequestDelete={(application) => {
+          setEditingApplicationId('');
+          setApplicationActionError('');
+          setPendingDeleteApplicationId(application._id);
+        }}
         onRetry={fetchApplications}
+        onUpdate={handleUpdateApplication}
       />
     </section>
   );

@@ -20,7 +20,15 @@ function formatDate(value) {
   }).format(date);
 }
 
-export function ApplicationCard({ application }) {
+export function ApplicationCard({
+  application,
+  isConfirmingDelete = false,
+  isDeleting = false,
+  onCancelDelete,
+  onConfirmDelete,
+  onEdit,
+  onRequestDelete,
+}) {
   const followUpAt = formatDate(application.followUpAt);
   const updatedAt = formatDate(application.updatedAt);
 
@@ -64,7 +72,27 @@ export function ApplicationCard({ application }) {
           </a>
         ) : null}
         <Link to={`/applications/${application._id}`}>Open detail</Link>
+        <button disabled={isDeleting} type="button" onClick={onEdit}>
+          Edit
+        </button>
+        <button disabled={isDeleting} type="button" onClick={onRequestDelete}>
+          Delete
+        </button>
       </div>
+
+      {isConfirmingDelete ? (
+        <div className="application-delete-confirm" role="alert">
+          <p>Delete this application and its timeline events?</p>
+          <div className="application-form-actions">
+            <button disabled={isDeleting} type="button" onClick={onConfirmDelete}>
+              {isDeleting ? 'Deleting...' : 'Delete application'}
+            </button>
+            <button disabled={isDeleting} type="button" onClick={onCancelDelete}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

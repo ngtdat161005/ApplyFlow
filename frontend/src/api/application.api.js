@@ -39,6 +39,19 @@ export function getApplication(applicationId) {
   return httpRequest(`/applications/${applicationId}`);
 }
 
+export function updateApplication(applicationId, payload) {
+  return httpRequest(`/applications/${applicationId}`, {
+    method: 'PATCH',
+    body: payload,
+  });
+}
+
+export function deleteApplication(applicationId) {
+  return httpRequest(`/applications/${applicationId}`, {
+    method: 'DELETE',
+  });
+}
+
 export function getApplicationListFromResponse(response) {
   if (Array.isArray(response)) {
     return response;

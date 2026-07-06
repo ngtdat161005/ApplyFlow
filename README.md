@@ -39,7 +39,7 @@ README này **không lặp lại** nội dung ở trên — chỉ đóng vai tr�
    ```env
    PORT=4000
    MONGODB_URI=mongodb://localhost:27017
-   MONGODB_DB_NAME=applyflow
+   MONGODB_DB_NAME=ApplyFlow
    JWT_SECRET=replace-with-a-local-development-secret
    VITE_API_BASE_URL=http://localhost:4000/api
    ```
@@ -75,6 +75,10 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### Troubleshooting
+
+- If a remote MongoDB host does not resolve locally, fix the machine or network DNS configuration outside the app runtime. Do not hard-code public DNS servers in `backend/src/server.js`.
 
 ## Project Tree
 
