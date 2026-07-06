@@ -18,11 +18,11 @@
 }
 
 .dashboard-summary-card {
-  background: #ffffff;
-  border: 1px solid #dde3d8;
-  border-left: 5px solid #7f9b8d;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 5px solid var(--color-muted);
   border-radius: 8px;
-  box-shadow: 0 12px 32px rgb(20 33 31 / 7%);
+  box-shadow: var(--shadow-soft);
   display: grid;
   gap: 8px;
   min-height: 112px;
@@ -30,33 +30,33 @@
 }
 
 .dashboard-summary-card-total {
-  border-left-color: #14211f;
+  border-left-color: var(--color-text);
 }
 
 .dashboard-summary-card-applied {
-  border-left-color: #3a7db3;
+  border-left-color: var(--color-primary);
 }
 
 .dashboard-summary-card-in_process {
-  border-left-color: #b38c21;
+  border-left-color: var(--color-warning);
 }
 
 .dashboard-summary-card-offer {
-  border-left-color: #3d8a43;
+  border-left-color: var(--color-success);
 }
 
 .dashboard-summary-card-rejected {
-  border-left-color: #b34b45;
+  border-left-color: var(--color-danger);
 }
 
 .dashboard-summary-card-withdrawn {
-  border-left-color: #766493;
+  border-left-color: var(--color-muted);
 }
 
 .dashboard-summary-card span,
 .dashboard-status-row span,
 .dashboard-meta dt {
-  color: #65716d;
+  color: var(--color-muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -95,7 +95,7 @@
 
 .dashboard-status-row {
   align-items: center;
-  border: 1px solid #e4eadf;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 10px;
@@ -114,31 +114,31 @@
 }
 
 .dashboard-status-dot-saved {
-  background: #87919a;
+  background: var(--color-muted);
 }
 
 .dashboard-status-dot-applied {
-  background: #3a7db3;
+  background: var(--color-primary);
 }
 
 .dashboard-status-dot-in_process {
-  background: #b38c21;
+  background: var(--color-warning);
 }
 
 .dashboard-status-dot-offer {
-  background: #3d8a43;
+  background: var(--color-success);
 }
 
 .dashboard-status-dot-rejected {
-  background: #b34b45;
+  background: var(--color-danger);
 }
 
 .dashboard-status-dot-withdrawn {
-  background: #766493;
+  background: var(--color-muted);
 }
 
 .dashboard-list-item {
-  border: 1px solid #dde3d8;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -154,7 +154,7 @@
 .dashboard-list-context,
 .dashboard-list-item time,
 .dashboard-meta dd {
-  color: #5c6965;
+  color: var(--color-muted);
 }
 
 .dashboard-list-item time {
@@ -180,28 +180,28 @@
 }
 
 .dashboard-empty-state {
-  background: #fbfcf8;
-  border: 1px solid #dde3d8;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  color: #5c6965;
+  color: var(--color-muted);
   display: grid;
   gap: 8px;
   padding: 16px;
 }
 
 .dashboard-empty-state-positive {
-  background: #eef8e7;
-  border-color: #b9dca5;
-  color: #285b2b;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: var(--color-success);
 }
 
 .dashboard-attention-item {
-  background: #fffdf7;
-  border-color: #e4dba8;
+  background: #fffbeb;
+  border-color: #fde68a;
 }
 
 .dashboard-attention-message {
-  border-left: 3px solid #d7e36c;
+  border-left: 3px solid var(--color-warning);
   padding-left: 10px;
 }
 

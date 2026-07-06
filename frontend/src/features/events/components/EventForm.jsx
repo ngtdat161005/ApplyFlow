@@ -1,6 +1,10 @@
 import { useState } from 'react';
 
-import { getErrorDetails, getErrorMessage } from '../../auth/auth.utils.js';
+import {
+  getErrorDetails,
+  getErrorFieldErrors,
+  getErrorMessage,
+} from '../../auth/auth.utils.js';
 import { EVENT_MODE_OPTIONS, EVENT_TYPE_OPTIONS } from '../event.constants.js';
 import { toDateTimeLocalValue, toIsoDateTime } from '../event.utils.js';
 
@@ -17,6 +21,20 @@ const EMPTY_VALUES = {
   contactEmail: '',
   note: '',
 };
+
+const EVENT_FIELD_NAMES = [
+  'type',
+  'title',
+  'occurredAt',
+  'scheduledAt',
+  'mode',
+  'location',
+  'meetingLink',
+  'contactName',
+  'contactPhone',
+  'contactEmail',
+  'note',
+];
 
 function getInitialValues(event) {
   if (!event) {
@@ -49,11 +67,21 @@ function buildEventPayload(values, mode) {
   const scheduledAt = toIsoDateTime(values.scheduledAt);
 
   if (values.occurredAt && !occurredAt) {
-    return { error: 'Occurred date must be valid.' };
+    return {
+      error: 'Occurred date must be valid.',
+      fieldErrors: {
+        occurredAt: 'Occurred date must be valid.',
+      },
+    };
   }
 
   if (values.scheduledAt && !scheduledAt) {
-    return { error: 'Scheduled date must be valid.' };
+    return {
+      error: 'Scheduled date must be valid.',
+      fieldErrors: {
+        scheduledAt: 'Scheduled date must be valid.',
+      },
+    };
   }
 
   const payload = {
@@ -103,6 +131,7 @@ function buildEventPayload(values, mode) {
 
 export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
   const [formValues, setFormValues] = useState(() => getInitialValues(event));
+  const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,21 +143,33 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
       ...currentValues,
       [name]: value,
     }));
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [name]: '',
+    }));
   }
 
   async function handleSubmit(submitEvent) {
     submitEvent.preventDefault();
+    setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
 
     if (!formValues.title.trim()) {
+      setFieldErrors({
+        title: 'Title is required.',
+      });
       setFormError('Title is required.');
       return;
     }
 
-    const { error, payload } = buildEventPayload(formValues, mode);
+    const { error, fieldErrors: payloadFieldErrors = {}, payload } = buildEventPayload(
+      formValues,
+      mode,
+    );
 
     if (error) {
+      setFieldErrors(payloadFieldErrors);
       setFormError(error);
       return;
     }
@@ -142,43 +183,64 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
         setFormValues(EMPTY_VALUES);
       }
     } catch (submitError) {
+      const nextFieldErrors = getErrorFieldErrors(submitError);
+
+      setFieldErrors(nextFieldErrors);
       setFormError(getErrorMessage(submitError, 'Unable to save event.'));
-      setFormErrorDetails(getErrorDetails(submitError));
+      setFormErrorDetails(
+        getErrorDetails(submitError, { excludeFields: EVENT_FIELD_NAMES }),
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   const submitLabel = mode === 'edit' ? 'Save event' : 'Create event';
+  const submittingLabel = mode === 'edit' ? 'Saving...' : 'Creating...';
 
   return (
     <form className="event-form" noValidate onSubmit={handleSubmit}>
       <div className="event-form-grid">
         <label>
           Type
-          <select disabled={isSubmitting} name="type" onChange={handleChange} value={formValues.type}>
+          <select
+            aria-invalid={Boolean(fieldErrors.type)}
+            disabled={isSubmitting}
+            name="type"
+            onChange={handleChange}
+            value={formValues.type}
+          >
             {EVENT_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
+          {fieldErrors.type ? <span className="field-error">{fieldErrors.type}</span> : null}
         </label>
 
         <label>
           Title
           <input
+            aria-invalid={Boolean(fieldErrors.title)}
             disabled={isSubmitting}
             name="title"
             onChange={handleChange}
             placeholder="Technical Interview"
             value={formValues.title}
           />
+          {fieldErrors.title ? <span className="field-error">{fieldErrors.title}</span> : null}
         </label>
 
         <label>
           Mode
-          <select disabled={isSubmitting} name="mode" onChange={handleChange} value={formValues.mode}>
+          <select
+            aria-invalid={Boolean(fieldErrors.mode)}
+            disabled={isSubmitting}
+            name="mode"
+            onChange={handleChange}
+            value={formValues.mode}
+          >
             <option value="">No mode</option>
             {EVENT_MODE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -186,33 +248,43 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
               </option>
             ))}
           </select>
+          {fieldErrors.mode ? <span className="field-error">{fieldErrors.mode}</span> : null}
         </label>
 
         <label>
           Occurred at
           <input
+            aria-invalid={Boolean(fieldErrors.occurredAt)}
             disabled={isSubmitting}
             name="occurredAt"
             onChange={handleChange}
             type="datetime-local"
             value={formValues.occurredAt}
           />
+          {fieldErrors.occurredAt ? (
+            <span className="field-error">{fieldErrors.occurredAt}</span>
+          ) : null}
         </label>
 
         <label>
           Scheduled at
           <input
+            aria-invalid={Boolean(fieldErrors.scheduledAt)}
             disabled={isSubmitting}
             name="scheduledAt"
             onChange={handleChange}
             type="datetime-local"
             value={formValues.scheduledAt}
           />
+          {fieldErrors.scheduledAt ? (
+            <span className="field-error">{fieldErrors.scheduledAt}</span>
+          ) : null}
         </label>
 
         <label>
           Meeting link
           <input
+            aria-invalid={Boolean(fieldErrors.meetingLink)}
             disabled={isSubmitting}
             inputMode="url"
             name="meetingLink"
@@ -220,44 +292,58 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
             placeholder="https://meet.google.com/example"
             value={formValues.meetingLink}
           />
+          {fieldErrors.meetingLink ? (
+            <span className="field-error">{fieldErrors.meetingLink}</span>
+          ) : null}
         </label>
 
         <label>
           Location
           <input
+            aria-invalid={Boolean(fieldErrors.location)}
             disabled={isSubmitting}
             name="location"
             onChange={handleChange}
             placeholder="Office, campus, or online"
             value={formValues.location}
           />
+          {fieldErrors.location ? <span className="field-error">{fieldErrors.location}</span> : null}
         </label>
 
         <label>
           Contact name
           <input
+            aria-invalid={Boolean(fieldErrors.contactName)}
             disabled={isSubmitting}
             name="contactName"
             onChange={handleChange}
             placeholder="HR Nguyen"
             value={formValues.contactName}
           />
+          {fieldErrors.contactName ? (
+            <span className="field-error">{fieldErrors.contactName}</span>
+          ) : null}
         </label>
 
         <label>
           Contact phone
           <input
+            aria-invalid={Boolean(fieldErrors.contactPhone)}
             disabled={isSubmitting}
             name="contactPhone"
             onChange={handleChange}
             placeholder="+84..."
             value={formValues.contactPhone}
           />
+          {fieldErrors.contactPhone ? (
+            <span className="field-error">{fieldErrors.contactPhone}</span>
+          ) : null}
         </label>
 
         <label>
           Contact email
           <input
+            aria-invalid={Boolean(fieldErrors.contactEmail)}
             disabled={isSubmitting}
             inputMode="email"
             name="contactEmail"
@@ -265,12 +351,16 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
             placeholder="hr@example.com"
             value={formValues.contactEmail}
           />
+          {fieldErrors.contactEmail ? (
+            <span className="field-error">{fieldErrors.contactEmail}</span>
+          ) : null}
         </label>
       </div>
 
       <label>
         Note
         <textarea
+          aria-invalid={Boolean(fieldErrors.note)}
           disabled={isSubmitting}
           name="note"
           onChange={handleChange}
@@ -278,6 +368,7 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
           rows="4"
           value={formValues.note}
         />
+        {fieldErrors.note ? <span className="field-error">{fieldErrors.note}</span> : null}
       </label>
 
       {formError ? (
@@ -295,7 +386,7 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
 
       <div className="application-form-actions">
         <button disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Saving...' : submitLabel}
+          {isSubmitting ? submittingLabel : submitLabel}
         </button>
         <button disabled={isSubmitting} type="button" onClick={onCancel}>
           Cancel
