@@ -1,4 +1,8 @@
-import { NotFoundError, UnauthorizedError } from "../../domain/shared/domain-errors.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+} from "../../domain/shared/domain-errors.js";
 import { toObjectId } from "../../utils/object-id.utils.js";
 import { deleteEventsByApplicationForUser } from "../event/event.repository.js";
 import { mapApplicationToResponse, mapApplicationsToResponse } from "./application.mapper.js";
@@ -24,7 +28,7 @@ function getApplicationObjectId(applicationId) {
   const applicationObjectId = toObjectId(applicationId);
 
   if (!applicationObjectId) {
-    throw new NotFoundError("Application not found");
+    throw new BadRequestError("Application ID must be a valid ObjectId");
   }
 
   return applicationObjectId;
