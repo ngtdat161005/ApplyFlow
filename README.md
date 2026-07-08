@@ -1,64 +1,97 @@
 # ApplyFlow
 
-ApplyFlow là ứng dụng web cá nhân để theo dõi quá trình ứng tuyển internship/job — applications, timeline events, và các trường hợp cần chú ý (attention flags).
+ApplyFlow la ung dung web ca nhan dung de theo doi qua trinh ung tuyen internship/job. V1 tap trung vao bon luong chinh: xac thuc nguoi dung, quan ly application, timeline event va dashboard voi cac muc can chu y.
 
-> **Status:** Đang trong giai đoạn phát triển V1 theo `docs/ApplyFlow Tasks.md`. Backend infrastructure (Task 02) đã sẵn sàng; các module business (auth, application, event, dashboard) hiện là placeholder.
+## 1. Muc Tieu
 
-## Cấu trúc Monorepo
+- Luu thong tin cong ty, vi tri, trang thai ung tuyen va ghi chu.
+- Theo doi cac su kien theo tung application: applied, HR call, OA, interview, follow-up, offer, rejected va note.
+- Hien thi dashboard tong quan: tong so application, thong ke theo trang thai, su kien sap toi va attention flags.
+- Tach ro backend API va frontend SPA de de phat trien, kiem thu va review.
 
-| Thư mục | Nội dung |
+## 2. Cong Nghe
+
+| Thanh phan | Cong nghe |
 |---|---|
-| `backend/` | Node.js + Express API, MongoDB native driver |
-| `frontend/` | React + Vite SPA |
-| `docs/` | Spec, architecture, task plan — nguồn sự thật cho hành vi & cấu trúc |
+| Backend | Node.js, Express, MongoDB native driver |
+| Frontend | React, Vite |
+| Auth | JWT, bcrypt |
+| Database | MongoDB |
 
-Chi tiết hành vi sản phẩm, ranh giới kỹ thuật và thứ tự triển khai nằm ở:
+## 3. Cau Truc Thu Muc
 
-- [`docs/ApplyFlow Specification.md`](docs/ApplyFlow%20Specification.md) — sản phẩm làm gì
-- [`docs/ApplyFlow Architecture.md`](docs/ApplyFlow%20Architecture.md) — code tổ chức ra sao
-- [`docs/ApplyFlow Tasks.md`](docs/ApplyFlow%20Tasks.md) — thứ tự & scope từng task
+```text
+ApplyFlow/
+├─ backend/
+│  ├─ scripts/      # Lightweight check scripts
+│  └─ src/          # Express app, routes, modules, domain logic
+├─ frontend/
+│  ├─ docs/         # Manual frontend testcases
+│  └─ src/          # React app, pages, features, API clients
+├─ docs/            # Specification, architecture, task plan
+├─ .env.example
+└─ README.md
+```
 
-README này **không lặp lại** nội dung ở trên — chỉ đóng vai trò index và hướng dẫn chạy dự án.
+Tai lieu chi tiet:
 
-## Yêu cầu hệ thống
+- `docs/ApplyFlow Specification.md`: hanh vi san pham.
+- `docs/ApplyFlow Architecture.md`: ranh gioi ky thuat va cach to chuc code.
+- `docs/ApplyFlow Tasks.md`: pham vi va thu tu task.
+- `frontend/docs/manual-frontend-testcases.md`: testcase thu cong cho frontend V1.
 
-- Node.js 18+ (ESM, `node:fs` APIs)
-- MongoDB instance đang chạy (local hoặc remote), truy cập được qua connection string
-- npm
+## 4. Yeu Cau He Thong
 
-## Setup
+- Node.js 18+.
+- npm.
+- MongoDB dang chay local hoac remote.
+- Git.
 
-1. Copy `.env.example` thành `.env` ở root (hoặc trong `backend/`, `env.js` sẽ tự tìm cả hai vị trí):
+## 5. Cai Dat Moi Truong
 
-   ```bash
-   cp .env.example .env
-   ```
+Clone du an va cai dependencies rieng cho tung app:
 
-2. Điền các biến bắt buộc:
+```bash
+git clone <repo-url>
+cd ApplyFlow
+cd backend
+npm install
+cd ../frontend
+npm install
+```
 
-   ```env
-   PORT=4000
-   MONGODB_URI=mongodb://localhost:27017
-   MONGODB_DB_NAME=ApplyFlow
-   JWT_SECRET=replace-with-a-local-development-secret
-   VITE_API_BASE_URL=http://localhost:4000/api
-   ```
+Tao file `.env` o root hoac trong `backend/` dua tren `.env.example`:
 
-## Chạy Backend
+```env
+PORT=4000
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB_NAME=ApplyFlow
+JWT_SECRET=replace-with-a-local-development-secret
+VITE_API_BASE_URL=http://localhost:4000
+```
+
+Ghi chu:
+
+- Backend se doc bien moi truong tu root `.env` hoac `backend/.env`.
+- Neu chay frontend bang Vite dev server va khong set `VITE_API_BASE_URL`, Vite proxy se chuyen mot so request ve `http://127.0.0.1:4000`.
+- Nen dung database rieng cho moi truong dev/test de tranh lam hong du lieu that.
+
+## 6. Chay Du An
+
+Chay backend:
 
 ```bash
 cd backend
-npm install
 npm run dev
 ```
 
-Server chỉ bắt đầu listen sau khi kết nối MongoDB thành công — nếu MongoDB không kết nối được, startup sẽ fail rõ ràng thay vì chạy ngầm ở trạng thái lỗi.
-
-Kiểm tra:
+Backend chi listen sau khi ket noi MongoDB thanh cong. Kiem tra API:
 
 ```bash
 curl http://localhost:4000/health
 ```
+
+Ket qua hop le:
 
 ```json
 {
@@ -68,69 +101,72 @@ curl http://localhost:4000/health
 }
 ```
 
-## Chạy Frontend
+Chay frontend trong terminal khac:
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
-## Verification Commands
+Mo URL Vite in ra trong terminal, thuong la `http://localhost:5173`.
 
-Run lightweight backend and frontend checks before closing V1 work:
+## 7. Kiem Thu Va Kiem Tra
+
+Backend:
 
 ```bash
 cd backend
 npm run check:attention
 npm run check:backend-hardening
+node --check scripts/check-backend-e2e.js
+```
+
+Kiem tra E2E backend qua HTTP:
+
+```bash
+cd backend
 npm run check:e2e
 ```
 
-`npm run check:e2e` expects the backend to already be running and reachable at `http://127.0.0.1:4000`, or at `APPLYFLOW_BACKEND_ORIGIN` if that environment variable is set.
+Dieu kien: backend phai dang chay va ket noi MongoDB thanh cong. Mac dinh script goi `http://127.0.0.1:4000`; co the doi bang:
+
+```bash
+APPLYFLOW_BACKEND_ORIGIN=http://localhost:4000 npm run check:e2e
+```
+
+Frontend:
 
 ```bash
 cd frontend
 npm run build
 ```
 
-### Troubleshooting
-
-- If a remote MongoDB host does not resolve locally, fix the machine or network DNS configuration outside the app runtime. Do not hard-code public DNS servers in `backend/src/server.js`.
-
-## Project Tree
+Test thu cong frontend theo:
 
 ```text
-ApplyFlow/
-├─ backend/
-│  └─ src/
-│     ├─ app.js
-│     ├─ server.js
-│     ├─ config/        # env.js, mongodb.js, constants.js
-│     ├─ db/             # collections.js, indexes.js
-│     ├─ domain/         # attention/, timeline/, shared/
-│     ├─ middlewares/    # auth, error, validate
-│     ├─ modules/        # application/, auth/, dashboard/, event/
-│     ├─ routes/
-│     ├─ shared/         # api-response.js, logger.js
-│     └─ utils/
-├─ docs/
-│  ├─ exports/           # bản PDF của spec/architecture/tasks
-│  ├─ ApplyFlow Architecture.md
-│  ├─ ApplyFlow Specification.md
-│  └─ ApplyFlow Tasks.md
-├─ frontend/
-│  └─ src/
-│     ├─ api/
-│     ├─ app/            # router.jsx, providers.jsx, query-client.js
-│     ├─ components/
-│     ├─ constants/
-│     ├─ features/       # applications/, auth/, dashboard/, events/
-│     ├─ hooks/
-│     ├─ pages/
-│     └─ utils/
-├─ .env.example
-└─ .gitignore
+frontend/docs/manual-frontend-testcases.md
 ```
 
-> Cây thư mục trên là bản rút gọn để định hướng nhanh. Cấu trúc đầy đủ, chi tiết từng module và lý do tổ chức như vậy nằm trong `docs/ApplyFlow Architecture.md`.
+## 8. API Chinh
+
+| Nhom | Endpoint |
+|---|---|
+| Health | `GET /health` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Applications | `GET /applications`, `POST /applications`, `GET/PATCH/DELETE /applications/:applicationId` |
+| Events | `GET/POST /applications/:applicationId/events`, `PATCH/DELETE /applications/:applicationId/events/:eventId` |
+| Dashboard | `GET /dashboard/summary` |
+
+Tat ca endpoint application, event va dashboard yeu cau JWT bearer token.
+
+## 9. Gioi Han V1
+
+- Chua co user-delete endpoint; tai khoan test co the con lai trong database.
+- Frontend V1 duoc kiem thu bang manual testcase va build check, chua co framework E2E nhu Playwright/Cypress.
+- Backend E2E script tao user/application/event that tren database dang cau hinh, nen chi nen chay voi database dev/test.
+
+## 10. Troubleshooting
+
+- Neu backend khong start, kiem tra `MONGODB_URI`, `MONGODB_DB_NAME` va MongoDB server.
+- Neu frontend bao khong goi duoc API, kiem tra backend co dang chay o port 4000 khong va gia tri `VITE_API_BASE_URL`.
+- Neu remote MongoDB host khong resolve duoc, sua DNS/network tren may chay app; khong hard-code DNS trong source code.
