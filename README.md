@@ -76,6 +76,24 @@ npm install
 npm run dev
 ```
 
+## Verification Commands
+
+Run lightweight backend and frontend checks before closing V1 work:
+
+```bash
+cd backend
+npm run check:attention
+npm run check:backend-hardening
+npm run check:e2e
+```
+
+`npm run check:e2e` expects the backend to already be running and reachable at `http://127.0.0.1:4000`, or at `APPLYFLOW_BACKEND_ORIGIN` if that environment variable is set.
+
+```bash
+cd frontend
+npm run build
+```
+
 ### Troubleshooting
 
 - If a remote MongoDB host does not resolve locally, fix the machine or network DNS configuration outside the app runtime. Do not hard-code public DNS servers in `backend/src/server.js`.
