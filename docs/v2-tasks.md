@@ -6,7 +6,7 @@ This document breaks ApplyFlow V2 into small, reviewable tasks for controlled AI
 
 V2 is not a rewrite. V2 is a quality-focused improvement pass over the existing ApplyFlow V1 repository.
 
-The task plan is designed to:
+This plan is designed to:
 
 1. preserve V1 behavior
 2. prevent scope creep
@@ -72,8 +72,8 @@ Examples:
 
 ```txt
 codex/v2-01-audit-v1-baseline
-codex/v2-04-application-list-contract
-codex/v2-10-dashboard-logic
+codex/v2-06-event-crud-contract
+codex/v2-13-dashboard-frontend-states
 ```
 
 ---
@@ -98,7 +98,7 @@ Codex must not:
 - merge branches unless explicitly asked
 - fake test results
 - add dependencies silently
-- edit README outside a dedicated docs task
+- edit README outside the dedicated README task
 - rewrite architecture
 - add out-of-scope features
 - perform broad UI redesigns
@@ -106,7 +106,37 @@ Codex must not:
 
 ---
 
-### 3.4 Definition of Done
+### 3.4 Documentation Edits During Implementation Tasks
+
+Implementation tasks may update `docs/test-plan.md`, `docs/regression-checklist.md`, or task-specific evidence docs only for:
+
+- test evidence alignment
+- checklist alignment
+- documenting behavior verified in the task
+- documenting skipped checks or known risks
+
+Implementation tasks must not rewrite:
+
+- `docs/v2-spec.md`
+- `docs/v2-tasks.md`
+- broad project documentation
+- `README.md`
+
+unless the task explicitly allows it.
+
+---
+
+### 3.5 README Rule
+
+README changes are allowed only in:
+
+- `V2-17 — Update README With Approved V2 Testing/Setup Section`
+
+`V2-18` may identify README issues, but it must record them as follow-up notes unless the user explicitly approves README corrections in that task.
+
+---
+
+### 3.6 Definition of Done
 
 A V2 task is done only when:
 
@@ -118,7 +148,7 @@ A V2 task is done only when:
 - manual tests are run if UI behavior is affected
 - validation/error behavior is checked if input is affected
 - access control is checked if user data is affected
-- docs/test files are updated if behavior changes
+- docs/test files are updated only when behavior or test evidence changes
 - final task summary reports changed files, tests, risks, and suggested commit message
 
 If code is written but not verified, the task status is:
@@ -133,17 +163,17 @@ not done.
 
 ## 4. V2 Phase Overview
 
-V2 is split into 6 phases and 15 tasks.
+V2 is split into 6 phases and 18 tasks.
 
 | Phase | Name | Task Count |
 |---|---:|---:|
 | Phase 0 | Baseline & Task Planning | 2 |
-| Phase 1 | Backend Contract Hardening | 3 |
-| Phase 2 | Frontend UX Consistency | 3 |
-| Phase 3 | Dashboard & Attention Polish | 2 |
+| Phase 1 | Backend Contract Hardening | 4 |
+| Phase 2 | Frontend UX Consistency | 4 |
+| Phase 3 | Dashboard & Attention Polish | 3 |
 | Phase 4 | QA Evidence Expansion | 3 |
 | Phase 5 | Docs & Final Release Check | 2 |
-| **Total** |  | **15** |
+| **Total** |  | **18** |
 
 ---
 
@@ -159,28 +189,31 @@ V2 is split into 6 phases and 15 tasks.
 - **V2-03** — Harden shared backend error, validation, and ObjectId behavior
 - **V2-04** — Harden application list search/filter/sort contract
 - **V2-05** — Harden application detail/update/delete and cascade behavior
+- **V2-06** — Harden event CRUD, ownership, validation, and timeline contract
 
 ### Phase 2 — Frontend UX Consistency
 
-- **V2-06** — Polish application list UX states and controls
-- **V2-07** — Polish application detail UX states and delete/update navigation
-- **V2-08** — Polish event timeline form/list UX
+- **V2-07** — Polish auth and protected-route UX states
+- **V2-08** — Polish application list UX states and controls
+- **V2-09** — Polish application detail UX states and delete/update navigation
+- **V2-10** — Polish event timeline form/list UX
 
 ### Phase 3 — Dashboard & Attention Polish
 
-- **V2-09** — Harden attention/date/timeline rule behavior
-- **V2-10** — Harden dashboard summary contract and frontend display
+- **V2-11** — Harden attention/date/timeline rule behavior
+- **V2-12** — Harden backend dashboard summary contract
+- **V2-13** — Polish frontend dashboard display states
 
 ### Phase 4 — QA Evidence Expansion
 
-- **V2-11** — Expand backend E2E/smoke checks
-- **V2-12** — Expand frontend manual regression checklist
-- **V2-13** — Add V2 test evidence documentation
+- **V2-14** — Expand backend E2E/smoke checks
+- **V2-15** — Expand frontend manual regression checklist
+- **V2-16** — Add V2 test evidence documentation
 
 ### Phase 5 — Docs & Final Release Check
 
-- **V2-14** — Update README with approved V2 testing/setup section
-- **V2-15** — Final V2 regression and release audit
+- **V2-17** — Update README with approved V2 testing/setup section
+- **V2-18** — Final V2 regression and release audit
 
 ---
 
@@ -210,6 +243,10 @@ codex/v2-01-audit-v1-baseline
 applyflow-qa-reviewer
 ```
 
+Use `applyflow-test-designer` only when evaluating existing tests, check scripts, and manual regression coverage.
+
+Do not use `applyflow-task-runner` to implement anything in this task.
+
 ### Allowed Scope
 
 Documentation and audit output only.
@@ -217,8 +254,8 @@ Documentation and audit output only.
 Allowed files:
 
 - `docs/v2-baseline-audit.md`
-- `docs/test-plan.md` only if adding audit notes
-- `docs/regression-checklist.md` only if adding audit notes
+- `docs/test-plan.md` only for small audit/test-plan notes if necessary
+- `docs/regression-checklist.md` only for small audit/checklist notes if necessary
 
 Do not edit backend/frontend source files.
 
@@ -227,6 +264,7 @@ Do not edit backend/frontend source files.
 Audit current repo against:
 
 - `docs/v2-spec.md`
+- `docs/v2-tasks.md`
 - V1 specification
 - V1 architecture
 - existing backend scripts
@@ -246,6 +284,7 @@ Unclear / needs manual verification
 Audit areas:
 
 - auth
+- protected routes
 - application CRUD
 - application search/filter/sort
 - event CRUD
@@ -257,7 +296,7 @@ Audit areas:
 - backend check scripts
 - frontend manual tests
 - CI workflow
-- README/setup accuracy, but do not edit README in this task
+- README/setup accuracy, but do not edit README
 
 ### Out of Scope
 
@@ -311,32 +350,116 @@ Run only if environment is available:
 ### Implementation Prompt
 
 ```txt
-Use AGENTS.md and the applyflow-qa-reviewer skill.
+Use AGENTS.md.
+
+Use the applyflow-qa-reviewer skill as the primary skill.
+Also consult applyflow-test-designer only when evaluating existing tests, check scripts, and manual regression coverage.
+Do not use applyflow-task-runner to implement anything in this task.
 
 Task: V2-01 — Audit V1 repository baseline against V2 spec.
 
-Read:
+Create and switch to this branch:
+
+codex/v2-01-audit-v1-baseline
+
+This is an audit/documentation task only.
+
+Do not modify backend source code.
+Do not modify frontend source code.
+Do not implement fixes.
+Do not update README.md.
+Do not add dependencies.
+Do not change package scripts.
+Do not rewrite docs broadly.
+Do not infer that a feature works only because it appears in the spec.
+Do not mark any capability as implemented unless the current repository or checks provide evidence.
+
+Read these documents first:
+
+- AGENTS.md
+- .codex/skills/applyflow-qa-reviewer/SKILL.md
+- .codex/skills/applyflow-test-designer/SKILL.md
 - docs/v2-spec.md
+- docs/v2-tasks.md
 - docs/ApplyFlow Specification.md
 - docs/ApplyFlow Architecture.md
 - docs/test-plan.md
 - docs/regression-checklist.md
-- current package scripts and CI workflow
+- existing frontend manual testcase docs if present
+- backend package scripts
+- frontend package scripts
+- GitHub Actions workflow files if present
 
-Do not modify source code.
-Do not implement fixes.
-Do not edit README.
+Goal:
 
-Create docs/v2-baseline-audit.md.
+Create a factual baseline audit of the current ApplyFlow repository before V2 implementation starts.
 
-Classify each major capability as Implemented, Partially implemented, Documented only, Missing, or Unclear / needs manual verification.
+Create this file:
 
-Report:
-- verified V1 behavior
-- gaps
-- risks
-- suggested follow-up tasks
-- checks run and exact results
+docs/v2-baseline-audit.md
+
+Use exactly these classification labels:
+
+- Implemented
+- Partially implemented
+- Documented only
+- Missing
+- Unclear / needs manual verification
+
+Required structure for docs/v2-baseline-audit.md:
+
+# ApplyFlow V2 Baseline Audit
+
+## 1. Audit Metadata
+## 2. Overall Verdict
+## 3. Capability Matrix
+## 4. Backend Baseline Findings
+## 5. Frontend Baseline Findings
+## 6. QA / Test Baseline Findings
+## 7. Documentation Accuracy Findings
+## 8. High-Risk Gaps for V2
+## 9. Recommended Adjustments for V2-02
+## 10. Checks Run
+## 11. Final Recommendation
+
+Rules for evidence:
+
+- If you verify by reading source files, cite the relevant file paths and summarize what you saw.
+- If you verify by running a command, include the exact command and result.
+- If you cannot verify something, mark it as Unclear / needs manual verification.
+- Do not claim browser/manual behavior passed unless it was actually tested.
+- Do not claim CI passed unless you inspected the workflow result or ran equivalent local checks.
+
+Commands to run if environment allows:
+
+cd backend
+npm run check:attention
+npm run check:backend-hardening
+
+If available and safe:
+npm run check:e2e
+
+cd ../frontend
+npm run build
+
+cd ..
+git status
+git diff --stat
+
+If a command cannot run because of missing env, missing database, missing server, or local environment limits, mark it as SKIPPED and explain exactly why.
+
+Final response format:
+
+Task:
+Branch:
+Created/changed files:
+Summary:
+Checks run:
+Skipped checks:
+Key risks:
+Recommended next step:
+Suggested commit message:
+Verdict: READY / NEEDS FIX
 ```
 
 ### Review Prompt
@@ -351,6 +474,7 @@ Check:
 - whether it incorrectly treats V2 polish items as V1 baseline
 - whether it modified source code or README
 - whether risks are concrete and useful for later V2 tasks
+- whether checks are reported honestly
 
 Return verdict: READY or NEEDS FIX.
 ```
@@ -361,11 +485,11 @@ Return verdict: READY or NEEDS FIX.
 
 ### Goal
 
-Turn the baseline audit into an execution plan for the remaining V2 tasks.
+Turn the baseline audit into a confirmed execution plan for the remaining V2 tasks.
 
 ### Why This Task Exists
 
-The initial V2 task plan should be confirmed against the actual repo before implementation starts.
+The V2 task plan should be confirmed against the actual repo before implementation starts.
 
 ### Suggested Branch
 
@@ -378,6 +502,8 @@ codex/v2-02-finalize-task-strategy
 ```txt
 applyflow-test-designer
 ```
+
+Use `applyflow-qa-reviewer` for scope-control review.
 
 ### Allowed Scope
 
@@ -394,9 +520,9 @@ Do not edit backend/frontend source.
 
 ### Implementation Requirements
 
-Update the V2 task strategy based on V2-01 findings.
+Update the V2 task/test strategy based on V2-01 findings.
 
-The task/test strategy must define:
+The task/test strategy must define or confirm:
 
 - final V2 task order
 - which tasks affect backend
@@ -406,6 +532,9 @@ The task/test strategy must define:
 - required manual tests per task
 - high-risk regression areas
 - which tasks are allowed to touch README
+- whether Markdown encoding/heading normalization is needed
+
+If docs contain broken mojibake or malformed punctuation, normalize Markdown to UTF-8 and prefer simple ASCII punctuation where practical.
 
 ### Out of Scope
 
@@ -415,13 +544,15 @@ Do not:
 - update README
 - add dependencies
 - rewrite the spec
+- modify source code
 
 ### Acceptance Criteria
 
 - V2 task/test strategy is consistent with the baseline audit.
 - The remaining task order is clear.
-- README changes are reserved for a dedicated docs task.
+- README changes are reserved for V2-17.
 - No source code changes occur.
+- Any encoding/heading cleanup is limited and documented.
 
 ### Verification Commands
 
@@ -438,8 +569,9 @@ Review manually:
 
 - [ ] Task order is coherent
 - [ ] Test strategy maps to actual repo risks
-- [ ] README edits are limited to V2-14
+- [ ] README edits are limited to V2-17
 - [ ] No feature work is included
+- [ ] Documentation cleanup does not change product behavior
 
 ### Implementation Prompt
 
@@ -457,10 +589,12 @@ Read:
 
 Do not modify source code.
 Do not edit README.
+Do not rewrite docs/v2-spec.md.
 
 Update docs/v2-tasks.md, docs/test-plan.md, and docs/regression-checklist.md only if needed.
 
 Make sure the remaining V2 task plan is grounded in the actual baseline audit.
+Normalize broken Markdown encoding/heading issues only if they interfere with reviewability.
 ```
 
 ### Review Prompt
@@ -485,7 +619,7 @@ Return verdict: READY or NEEDS FIX.
 
 ### Goal
 
-Make backend error behavior predictable for V2-touched routes.
+Make shared backend error behavior predictable for V2-touched routes.
 
 ### Why This Task Exists
 
@@ -505,16 +639,16 @@ applyflow-task-runner
 
 ### Allowed Scope
 
-Backend shared validation/error utilities and tests/check scripts.
+Backend shared validation/error utilities and route-specific behavior needed for later V2 tasks.
 
 Likely files:
 
 - `backend/src/middlewares/error.middleware.js`
 - `backend/src/utils/object-id.utils.js`
 - backend domain/shared error files
-- backend validators if needed
-- backend check scripts
-- `docs/test-plan.md` if behavior is documented
+- route-specific validators only when needed for V2-touched behavior
+- backend check scripts if needed
+- `docs/test-plan.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -553,6 +687,9 @@ Rules:
 - preserve existing compatible behavior
 - do not rewrite route architecture
 - do not add dependencies unless explicitly approved
+- do not rewrite all backend validators
+
+This task must not become a backend-wide validation refactor. It may only touch shared error/ObjectId utilities and route-specific validation behavior needed for later V2 tasks.
 
 ### Out of Scope
 
@@ -586,6 +723,8 @@ Optional if available:
 npm run check:e2e
 ```
 
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
 ### Manual Test Checklist
 
 API/manual checks if environment is available:
@@ -612,11 +751,15 @@ Do not change frontend.
 Do not update README.
 Do not add dependencies.
 Do not rewrite route architecture.
+Do not rewrite all validators.
 
 Run:
 cd backend
 npm run check:attention
 npm run check:backend-hardening
+
+Run npm run check:e2e only if backend/database requirements are available.
+If E2E cannot run, mark it as SKIPPED and explain why.
 
 Report exact results.
 ```
@@ -634,6 +777,7 @@ Focus on:
 - ObjectId handling
 - cross-user private resource behavior
 - architecture preservation
+- no backend-wide validator rewrite
 - no unrelated refactor
 - test evidence
 
@@ -673,7 +817,7 @@ Likely files:
 - backend application module
 - backend application validator
 - backend check scripts
-- `docs/test-plan.md` if needed
+- `docs/test-plan.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -684,8 +828,10 @@ Implement or verify:
 - searches `company` and `role`
 - trims whitespace
 - empty search behaves like no search
-- case-insensitive if current implementation supports it or task implements it safely
+- case-insensitive search if practical
 - user-scoped
+
+If case-insensitive search is skipped because the current implementation does not support it safely, document the reason in the task summary and mark it as a follow-up risk.
 
 #### Filter
 
@@ -762,6 +908,8 @@ Optional if available:
 npm run check:e2e
 ```
 
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
 ### Manual Test Checklist
 
 API/manual checks:
@@ -795,6 +943,8 @@ Implement only backend application list contract hardening:
 - invalid query validation
 - user scoping
 
+If case-insensitive search is not safely implemented, document why and mark it as a follow-up risk.
+
 Do not change frontend.
 Do not add pagination.
 Do not update README.
@@ -815,6 +965,7 @@ Focus on:
 - user scoping
 - default sort
 - followUpAt being treated as V2 extension
+- case-insensitive search decision documented
 - no pagination/scope creep
 - no response shape breakage
 - backend check evidence
@@ -854,6 +1005,7 @@ Likely files:
 - backend event repository only for cascade delete
 - backend validators
 - backend check scripts
+- `docs/test-plan.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -886,7 +1038,7 @@ Do not:
 - redesign application schema
 - add soft delete
 - update README
-- implement unrelated event CRUD changes
+- implement unrelated event CRUD changes beyond cascade delete
 
 ### Acceptance Criteria
 
@@ -909,6 +1061,8 @@ Optional if available:
 ```powershell
 npm run check:e2e
 ```
+
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
 
 ### Manual Test Checklist
 
@@ -940,6 +1094,7 @@ Do not change frontend.
 Do not update README.
 Do not add soft delete.
 Do not redesign schema.
+Do not implement unrelated event CRUD changes beyond cascade delete.
 
 Run backend checks and report exact results.
 ```
@@ -963,11 +1118,378 @@ Focus on:
 
 ---
 
+## V2-06 — Harden Event CRUD, Ownership, Validation, and Timeline Contract
+
+### Goal
+
+Harden backend event CRUD behavior, access control, validation, and event timeline ordering.
+
+### Why This Task Exists
+
+Event APIs are high-risk ownership surfaces. They require explicit parent application ownership checks, event ownership checks, malformed ObjectId handling, update/delete safety, validation, and stable ordering.
+
+### Suggested Branch
+
+```txt
+codex/v2-06-event-crud-contract
+```
+
+### Suggested Skill
+
+```txt
+applyflow-task-runner
+```
+
+### Allowed Scope
+
+Backend event route/service/repository/validator/timeline files and relevant checks.
+
+Likely files:
+
+- backend event module
+- backend application repository/service only for ownership checks
+- backend timeline utilities
+- backend validators
+- backend check scripts
+- `docs/test-plan.md` only for test/checklist alignment
+
+### Implementation Requirements
+
+Verify or implement:
+
+#### Parent Ownership
+
+For all event routes:
+
+- parent application must exist
+- parent application must belong to authenticated user
+- cross-user parent application access returns `404`
+
+#### Event Ownership
+
+For event detail/update/delete operations:
+
+- event must belong to the authenticated user
+- event must belong to the requested parent application
+- event from another application must not be updated/deleted through a mismatched route
+- cross-user event access returns `404`
+
+#### ObjectId Behavior
+
+For nested event routes:
+
+- malformed `applicationId` returns `400`
+- malformed `eventId` returns `400`
+- valid but nonexistent IDs return `404`
+- valid but cross-user IDs return `404`
+
+#### Validation
+
+Create event requires:
+
+- `type`: valid event type
+- `title`: non-empty string after trim
+
+Update event allows:
+
+- `type`
+- `title`
+- `occurredAt`
+- `scheduledAt`
+- `mode`
+- `location`
+- `meetingLink`
+- `contactName`
+- `contactPhone`
+- `contactEmail`
+- `note`
+
+Forbidden update fields return `400`:
+
+- `_id`
+- `applicationId`
+- `userId`
+- `createdAt`
+- `updatedAt`
+
+Rules:
+
+- nullable optional fields can be cleared with `null`
+- invalid enum values return `400`
+- malformed dates return `400`
+- invalid `contactEmail` returns `400`
+- `meetingLink` should be a valid URL if provided
+- `contactPhone` may remain a plain string
+
+#### Timeline Ordering
+
+Event list returns events sorted by effective event date.
+
+Effective date priority:
+
+1. `occurredAt`
+2. `scheduledAt`
+3. `createdAt`
+
+Default backend order:
+
+```txt
+ascending chronological order
+```
+
+Tie-breakers:
+
+1. `createdAt`
+2. `_id`
+
+### Out of Scope
+
+Do not:
+
+- change frontend timeline UI
+- implement dashboard logic
+- implement attention flags
+- add calendar/email/reminder features
+- update README
+- add event fields not defined in the spec
+
+### Acceptance Criteria
+
+- event CRUD is user-scoped
+- parent application ownership is enforced
+- mismatched application/event route updates are blocked
+- malformed IDs return 400
+- cross-user/private valid IDs return 404
+- event validation is deterministic
+- timeline ordering is stable
+- backend checks pass
+
+### Verification Commands
+
+```powershell
+cd backend
+npm run check:attention
+npm run check:backend-hardening
+```
+
+Optional if available:
+
+```powershell
+npm run check:e2e
+```
+
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
+### Manual Test Checklist
+
+API/manual checks:
+
+- [ ] create event for owned application
+- [ ] create event for cross-user application returns 404
+- [ ] list events for owned application
+- [ ] list events for cross-user application returns 404
+- [ ] update owned event
+- [ ] update event through wrong application route fails
+- [ ] delete owned event
+- [ ] delete cross-user event fails
+- [ ] malformed applicationId returns 400
+- [ ] malformed eventId returns 400
+- [ ] invalid type returns 400
+- [ ] blank title returns 400
+- [ ] forbidden update field returns 400
+- [ ] timeline order is stable
+
+### Implementation Prompt
+
+```txt
+Use AGENTS.md and the applyflow-task-runner skill.
+
+Task: V2-06 — Harden event CRUD, ownership, validation, and timeline contract.
+
+Read docs/v2-spec.md first.
+
+Focus only on backend event CRUD contract:
+- parent application ownership
+- event ownership
+- nested route safety
+- malformed ObjectId handling
+- validation
+- update/delete safety
+- timeline ordering
+
+Do not change frontend.
+Do not implement dashboard or attention logic.
+Do not add calendar/email/reminder features.
+Do not update README.
+Do not add new event fields.
+
+Run backend checks and report exact results.
+```
+
+### Review Prompt
+
+```txt
+Use AGENTS.md and the applyflow-qa-reviewer skill.
+
+Review V2-06.
+
+Focus on:
+- parent application ownership
+- event ownership
+- nested route mismatch protection
+- ObjectId behavior
+- validation
+- timeline ordering
+- no frontend/dashboard scope creep
+- backend check evidence
+```
+
+---
+
 # Phase 2 — Frontend UX Consistency
 
 ---
 
-## V2-06 — Polish Application List UX States and Controls
+## V2-07 — Polish Auth and Protected-Route UX States
+
+### Goal
+
+Improve frontend auth-related loading, submit, validation, error, logout, and protected-route states.
+
+### Why This Task Exists
+
+V2 frontend reliability includes auth and unauthorized behavior. Auth UX gaps should not be left only to final regression.
+
+### Suggested Branch
+
+```txt
+codex/v2-07-auth-ux-states
+```
+
+### Suggested Skill
+
+```txt
+applyflow-task-runner
+```
+
+### Allowed Scope
+
+Frontend auth pages, auth store/context, protected route logic, auth API client, and related CSS.
+
+Likely files:
+
+- frontend auth API client
+- login page
+- register page
+- auth store/context/hooks
+- protected route components
+- layout/nav logout area if needed
+- related CSS
+- `docs/regression-checklist.md` only for test/checklist alignment
+
+### Implementation Requirements
+
+Implement or polish:
+
+- login loading/submit state
+- register loading/submit state
+- backend validation error display
+- invalid credential error display
+- auth bootstrap loading state if token exists
+- protected route redirect behavior
+- unauthorized state behavior
+- logout by clearing local auth state/token
+- form input should remain usable after backend validation errors
+
+Rules:
+
+- no backend logout endpoint unless already exists and task explicitly uses it
+- no OAuth
+- no password reset
+- no new auth architecture
+- no UI library
+- no README update
+
+### Out of Scope
+
+Do not:
+
+- change backend auth behavior
+- add refresh tokens
+- add profile editing
+- add remember-me complexity
+- redesign whole app layout
+
+### Acceptance Criteria
+
+- login/register forms show submit/loading states
+- auth errors are understandable
+- protected pages do not flash broken data for unauthenticated users
+- logout clears local auth state/token
+- refresh with valid token behaves correctly if supported
+- frontend build passes
+
+### Verification Commands
+
+```powershell
+cd frontend
+npm run build
+```
+
+### Manual Test Checklist
+
+- [ ] register with valid data
+- [ ] register with invalid email/password if backend validates
+- [ ] login with valid credentials
+- [ ] login with invalid credentials
+- [ ] submit button/loading state behaves correctly
+- [ ] refresh with token
+- [ ] access protected route without token
+- [ ] logout clears auth state
+- [ ] form remains usable after validation error
+
+### Implementation Prompt
+
+```txt
+Use AGENTS.md and the applyflow-task-runner skill.
+
+Task: V2-07 — Polish auth and protected-route UX states.
+
+Read docs/v2-spec.md first.
+
+Implement frontend-only auth UX improvements:
+- login/register loading and submit states
+- validation/error display
+- auth bootstrap state
+- protected route behavior
+- logout local token/auth clearing
+
+Do not change backend auth behavior.
+Do not add OAuth, refresh tokens, or password reset.
+Do not add UI libraries.
+Do not update README.
+
+Run frontend build and report exact result.
+```
+
+### Review Prompt
+
+```txt
+Use AGENTS.md and the applyflow-qa-reviewer skill.
+
+Review V2-07.
+
+Focus on:
+- auth UX states
+- protected route behavior
+- no backend auth scope creep
+- no UI-library drift
+- frontend build/manual test evidence
+```
+
+---
+
+## V2-08 — Polish Application List UX States and Controls
 
 ### Goal
 
@@ -980,7 +1502,7 @@ Backend list behavior is now clearer; frontend controls and states should match 
 ### Suggested Branch
 
 ```txt
-codex/v2-06-application-list-ux
+codex/v2-08-application-list-ux
 ```
 
 ### Suggested Skill
@@ -999,7 +1521,7 @@ Likely files:
 - Applications page
 - application list/filter components
 - related CSS
-- `docs/regression-checklist.md` if manual cases change
+- `docs/regression-checklist.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -1051,12 +1573,6 @@ cd frontend
 npm run build
 ```
 
-Optional:
-
-```powershell
-git diff --stat
-```
-
 ### Manual Test Checklist
 
 - [ ] open Applications page with data
@@ -1077,7 +1593,7 @@ git diff --stat
 ```txt
 Use AGENTS.md and the applyflow-task-runner skill.
 
-Task: V2-06 — Polish application list UX states and controls.
+Task: V2-08 — Polish application list UX states and controls.
 
 Read docs/v2-spec.md first.
 
@@ -1101,7 +1617,7 @@ Run frontend build and report exact result.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-06.
+Review V2-08.
 
 Focus on:
 - frontend state completeness
@@ -1114,7 +1630,7 @@ Focus on:
 
 ---
 
-## V2-07 — Polish Application Detail UX States and Delete/Update Navigation
+## V2-09 — Polish Application Detail UX States and Delete/Update Navigation
 
 ### Goal
 
@@ -1127,7 +1643,7 @@ The detail page is a high-use operational page and must not break on refresh or 
 ### Suggested Branch
 
 ```txt
-codex/v2-07-application-detail-ux
+codex/v2-09-application-detail-ux
 ```
 
 ### Suggested Skill
@@ -1147,7 +1663,7 @@ Likely files:
 - application detail components
 - event timeline container only if necessary for state display
 - related CSS
-- regression checklist if needed
+- `docs/regression-checklist.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -1215,7 +1731,7 @@ npm run build
 ```txt
 Use AGENTS.md and the applyflow-task-runner skill.
 
-Task: V2-07 — Polish application detail UX states and delete/update navigation.
+Task: V2-09 — Polish application detail UX states and delete/update navigation.
 
 Read docs/v2-spec.md first.
 
@@ -1240,7 +1756,7 @@ Run frontend build and report exact result.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-07.
+Review V2-09.
 
 Focus on:
 - controlled detail states
@@ -1253,7 +1769,7 @@ Focus on:
 
 ---
 
-## V2-08 — Polish Event Timeline Form/List UX
+## V2-10 — Polish Event Timeline Form/List UX
 
 ### Goal
 
@@ -1266,7 +1782,7 @@ Events drive dashboard and attention logic. The UI must make event creation/edit
 ### Suggested Branch
 
 ```txt
-codex/v2-08-event-timeline-ux
+codex/v2-10-event-timeline-ux
 ```
 
 ### Suggested Skill
@@ -1287,7 +1803,7 @@ Likely files:
 - EventForm
 - ApplicationDetailPage integration
 - related CSS
-- regression checklist if needed
+- `docs/regression-checklist.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -1355,7 +1871,7 @@ npm run build
 ```txt
 Use AGENTS.md and the applyflow-task-runner skill.
 
-Task: V2-08 — Polish event timeline form/list UX.
+Task: V2-10 — Polish event timeline form/list UX.
 
 Read docs/v2-spec.md first.
 
@@ -1378,7 +1894,7 @@ Run frontend build and report exact result.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-08.
+Review V2-10.
 
 Focus on:
 - event form/list UX
@@ -1395,7 +1911,7 @@ Focus on:
 
 ---
 
-## V2-09 — Harden Attention/Date/Timeline Rule Behavior
+## V2-11 — Harden Attention/Date/Timeline Rule Behavior
 
 ### Goal
 
@@ -1408,7 +1924,7 @@ Attention logic is high-risk because it depends on status, event type, effective
 ### Suggested Branch
 
 ```txt
-codex/v2-09-attention-rules
+codex/v2-11-attention-rules
 ```
 
 ### Suggested Skill
@@ -1428,6 +1944,7 @@ Likely files:
 - date utilities
 - dashboard service only if needed for integration
 - backend check scripts
+- `docs/test-plan.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -1514,6 +2031,8 @@ Optional:
 npm run check:e2e
 ```
 
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
 ### Manual Test Checklist
 
 API/check scenarios:
@@ -1532,7 +2051,7 @@ API/check scenarios:
 ```txt
 Use AGENTS.md and the applyflow-task-runner skill.
 
-Task: V2-09 — Harden attention/date/timeline rule behavior.
+Task: V2-11 — Harden attention/date/timeline rule behavior.
 
 Read docs/v2-spec.md first.
 
@@ -1553,7 +2072,7 @@ Run backend checks and report exact results.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-09.
+Review V2-11.
 
 Focus on:
 - attention business correctness
@@ -1567,20 +2086,20 @@ Focus on:
 
 ---
 
-## V2-10 — Harden Dashboard Summary Contract and Frontend Display
+## V2-12 — Harden Backend Dashboard Summary Contract
 
 ### Goal
 
-Make dashboard backend summary and frontend display reliable, user-scoped, and explainable.
+Make backend dashboard summary behavior deterministic, user-scoped, and testable.
 
 ### Why This Task Exists
 
-Dashboard is the product’s main value page. It must show backend-derived data without frontend duplicating business logic.
+Dashboard API is the product’s main summary contract. It should be stable before frontend dashboard polish.
 
 ### Suggested Branch
 
 ```txt
-codex/v2-10-dashboard-polish
+codex/v2-12-dashboard-backend-contract
 ```
 
 ### Suggested Skill
@@ -1591,17 +2110,15 @@ applyflow-task-runner
 
 ### Allowed Scope
 
-Backend dashboard service/API and frontend dashboard page/components.
+Backend dashboard service/API, attention integration, and related backend checks.
 
 Likely files:
 
 - backend dashboard module
 - backend attention integration
+- backend application/event repositories only as needed for dashboard queries
 - backend check scripts
-- frontend dashboard API client
-- frontend dashboard page/components
-- related CSS
-- regression checklist if needed
+- `docs/test-plan.md` only for test/checklist alignment
 
 ### Implementation Requirements
 
@@ -1646,26 +2163,17 @@ If present:
 
 Default limits must be documented in task summary. If no limit is implemented, return all matching records.
 
-Frontend dashboard must:
-
-- display backend-derived data
-- not reimplement attention logic
-- handle loading state
-- handle empty dashboard
-- handle empty subsection
-- handle API error state
-- explain why attention items exist using backend messages
-
 ### Out of Scope
 
 Do not:
 
-- add charts unless explicitly approved
+- change frontend dashboard UI
+- add charts
 - add analytics
-- add frontend duplicate attention logic
+- duplicate attention logic outside backend domain/service structure
 - add calendar view
 - update README
-- add UI library
+- add dependencies
 
 ### Acceptance Criteria
 
@@ -1673,8 +2181,7 @@ Do not:
 - status counts are correct
 - upcoming event window is deterministic
 - attention flags come from backend logic
-- frontend displays loading/empty/error states
-- frontend build passes
+- recentApplications is correctly treated as V2 polish if present
 - backend checks pass
 
 ### Verification Commands
@@ -1683,19 +2190,19 @@ Do not:
 cd backend
 npm run check:attention
 npm run check:backend-hardening
-
-cd ../frontend
-npm run build
 ```
 
 Optional:
 
 ```powershell
-cd ../backend
 npm run check:e2e
 ```
 
+If optional E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
 ### Manual Test Checklist
+
+API/check scenarios:
 
 - [ ] dashboard with no applications
 - [ ] dashboard with multiple statuses
@@ -1703,34 +2210,34 @@ npm run check:e2e
 - [ ] dashboard excludes past events
 - [ ] dashboard excludes events at/after now + 3 days
 - [ ] dashboard excludes closed-status upcoming events
-- [ ] attention flags display backend messages
-- [ ] frontend does not calculate flags locally
+- [ ] attention flags are returned separately from upcomingEvents
 - [ ] dashboard as user B does not show user A data
-- [ ] refresh dashboard page
+- [ ] recentApplications, if present, follows V2 ordering
 
 ### Implementation Prompt
 
 ```txt
 Use AGENTS.md and the applyflow-task-runner skill.
 
-Task: V2-10 — Harden dashboard summary contract and frontend display.
+Task: V2-12 — Harden backend dashboard summary contract.
 
 Read docs/v2-spec.md first.
 
-Implement or verify backend dashboard contract and frontend dashboard display:
+Implement or verify backend dashboard contract:
 - status counts
 - upcomingEvents
 - attentionFlags
-- optional recentApplications as V2 polish if already supported or explicitly implemented here
-- loading/empty/error states
+- optional recentApplications as V2 polish only if already supported or explicitly implemented here
+- user scoping
+- deterministic date/order rules
 
+Do not change frontend.
 Do not add charts.
 Do not add analytics.
-Do not duplicate attention logic in frontend.
-Do not add UI libraries.
 Do not update README.
+Do not add dependencies.
 
-Run backend checks and frontend build. Report exact results.
+Run backend checks and report exact results.
 ```
 
 ### Review Prompt
@@ -1738,16 +2245,155 @@ Run backend checks and frontend build. Report exact results.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-10.
+Review V2-12.
 
 Focus on:
 - dashboard user scoping
 - upcoming event date window
 - closed statuses
-- attention logic not duplicated in frontend
+- attention logic not duplicated outside intended backend domain/service structure
 - recentApplications treated as V2 polish
-- frontend state handling
-- backend/frontend check evidence
+- backend check evidence
+```
+
+---
+
+## V2-13 — Polish Frontend Dashboard Display States
+
+### Goal
+
+Make frontend dashboard display reliable, explainable, and aligned with the backend dashboard contract.
+
+### Why This Task Exists
+
+Frontend dashboard display should consume backend-derived data and avoid duplicating business rules.
+
+### Suggested Branch
+
+```txt
+codex/v2-13-dashboard-frontend-states
+```
+
+### Suggested Skill
+
+```txt
+applyflow-task-runner
+```
+
+### Allowed Scope
+
+Frontend dashboard API client, page/components, CSS, and checklist alignment.
+
+Likely files:
+
+- frontend dashboard API client
+- frontend dashboard page/components
+- related CSS
+- `docs/regression-checklist.md` only for test/checklist alignment
+
+### Implementation Requirements
+
+Frontend dashboard must:
+
+- display backend-derived status counts
+- display upcoming events from `upcomingEvents`
+- display attention flags from `attentionFlags`
+- display `recentApplications` only if backend response supports it
+- not reimplement attention flag business logic
+- handle loading state
+- handle empty dashboard
+- handle empty subsections
+- handle API error state
+- explain why attention items exist using backend messages
+- preserve route/auth behavior
+
+Rules:
+
+- no charts unless explicitly approved
+- no analytics
+- no calendar view
+- no UI library
+- no backend changes unless a small API-client alignment is necessary
+
+### Out of Scope
+
+Do not:
+
+- change backend dashboard contract
+- add charts
+- add analytics
+- add frontend duplicate attention logic
+- update README
+- add UI library
+
+### Acceptance Criteria
+
+- frontend dashboard renders backend data correctly
+- empty states are clear
+- API error state is clear
+- attention messages are understandable
+- frontend does not calculate flags locally
+- frontend build passes
+
+### Verification Commands
+
+```powershell
+cd frontend
+npm run build
+```
+
+### Manual Test Checklist
+
+- [ ] dashboard with no applications
+- [ ] dashboard with applications
+- [ ] status counts display
+- [ ] upcoming events display
+- [ ] empty upcoming events state
+- [ ] attention flags display backend messages
+- [ ] empty attention state
+- [ ] API error state if testable
+- [ ] refresh dashboard page
+- [ ] basic responsive sanity
+
+### Implementation Prompt
+
+```txt
+Use AGENTS.md and the applyflow-task-runner skill.
+
+Task: V2-13 — Polish frontend dashboard display states.
+
+Read docs/v2-spec.md first.
+
+Implement frontend-only dashboard display improvements:
+- loading state
+- empty dashboard
+- empty subsections
+- error state
+- display backend-derived statusCounts, upcomingEvents, attentionFlags
+- display recentApplications only if backend supports it
+
+Do not change backend dashboard contract.
+Do not add charts or analytics.
+Do not duplicate attention logic in frontend.
+Do not add UI libraries.
+Do not update README.
+
+Run frontend build and report exact result.
+```
+
+### Review Prompt
+
+```txt
+Use AGENTS.md and the applyflow-qa-reviewer skill.
+
+Review V2-13.
+
+Focus on:
+- frontend dashboard state handling
+- backend contract alignment
+- no frontend attention logic duplication
+- no charts/analytics scope creep
+- build/manual test evidence
 ```
 
 ---
@@ -1756,7 +2402,7 @@ Focus on:
 
 ---
 
-## V2-11 — Expand Backend E2E/Smoke Checks
+## V2-14 — Expand Backend E2E/Smoke Checks
 
 ### Goal
 
@@ -1769,7 +2415,7 @@ V2 is quality-focused. Backend check scripts should demonstrate auth, ownership,
 ### Suggested Branch
 
 ```txt
-codex/v2-11-backend-e2e-checks
+codex/v2-14-backend-e2e-checks
 ```
 
 ### Suggested Skill
@@ -1804,6 +2450,7 @@ Expand backend checks to cover:
 - cross-user application access
 - event CRUD
 - cross-user event access
+- nested event ownership mismatch
 - cascade delete
 - dashboard summary shape
 - dashboard user scoping
@@ -1843,19 +2490,22 @@ npm run check:backend-hardening
 npm run check:e2e
 ```
 
+If E2E cannot run because backend/database requirements are unavailable, mark it as SKIPPED and explain why.
+
 ### Manual Test Checklist
 
-- [ ] run e2e with backend/database available
+- [ ] run E2E with backend/database available
 - [ ] confirm failure output is readable
 - [ ] confirm disposable data strategy
 - [ ] confirm script does not depend on private real user data
+- [ ] confirm skipped E2E is explained if environment is unavailable
 
 ### Implementation Prompt
 
 ```txt
 Use AGENTS.md and the applyflow-test-designer skill.
 
-Task: V2-11 — Expand backend E2E/smoke checks.
+Task: V2-14 — Expand backend E2E/smoke checks.
 
 Read docs/v2-spec.md first.
 
@@ -1865,6 +2515,7 @@ Expand backend E2E/smoke checks for high-risk V2 behavior:
 - validation
 - applications
 - events
+- nested event ownership mismatch
 - cascade delete
 - dashboard
 
@@ -1872,7 +2523,11 @@ Do not add a new test framework unless explicitly approved.
 Do not update README.
 Do not change product behavior just to make tests pass.
 
-Run backend checks and report exact results.
+Run backend checks.
+Run npm run check:e2e only when backend/database requirements are available.
+If E2E cannot run, mark it as SKIPPED and explain why.
+
+Report exact results.
 ```
 
 ### Review Prompt
@@ -1880,19 +2535,20 @@ Run backend checks and report exact results.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-11.
+Review V2-14.
 
 Focus on:
 - meaningful backend coverage
 - disposable data
 - clear failures
+- E2E skip handling
 - no test-framework scope creep
 - no product behavior changes hidden inside test task
 ```
 
 ---
 
-## V2-12 — Expand Frontend Manual Regression Checklist
+## V2-15 — Expand Frontend Manual Regression Checklist
 
 ### Goal
 
@@ -1905,7 +2561,7 @@ Frontend browser behavior is difficult to prove through build checks alone. Manu
 ### Suggested Branch
 
 ```txt
-codex/v2-12-frontend-regression-checklist
+codex/v2-15-frontend-regression-checklist
 ```
 
 ### Suggested Skill
@@ -1986,7 +2642,7 @@ Use the checklist once if environment is available:
 ```txt
 Use AGENTS.md and the applyflow-test-designer skill.
 
-Task: V2-12 — Expand frontend manual regression checklist.
+Task: V2-15 — Expand frontend manual regression checklist.
 
 Read docs/v2-spec.md first.
 
@@ -2004,7 +2660,7 @@ Make the checklist usable by a tester, with preconditions, actions, expected res
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-12.
+Review V2-15.
 
 Focus on:
 - testcase clarity
@@ -2016,7 +2672,7 @@ Focus on:
 
 ---
 
-## V2-13 — Add V2 Test Evidence Documentation
+## V2-16 — Add V2 Test Evidence Documentation
 
 ### Goal
 
@@ -2029,7 +2685,7 @@ A tester-oriented portfolio project should not only have tests; it should also e
 ### Suggested Branch
 
 ```txt
-codex/v2-13-test-evidence-docs
+codex/v2-16-test-evidence-docs
 ```
 
 ### Suggested Skill
@@ -2103,7 +2759,7 @@ Review manually:
 ```txt
 Use AGENTS.md and the applyflow-test-designer skill.
 
-Task: V2-13 — Add V2 test evidence documentation.
+Task: V2-16 — Add V2 test evidence documentation.
 
 Read docs/v2-spec.md first.
 
@@ -2121,7 +2777,7 @@ Document automated checks, manual regression, known limitations, and evidence te
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-13.
+Review V2-16.
 
 Focus on:
 - honest QA evidence
@@ -2137,7 +2793,7 @@ Focus on:
 
 ---
 
-## V2-14 — Update README With Approved V2 Testing/Setup Section
+## V2-17 — Update README With Approved V2 Testing/Setup Section
 
 ### Goal
 
@@ -2145,12 +2801,12 @@ Update README only after V2 behavior and test strategy are stable.
 
 ### Why This Task Exists
 
-README changes are explicitly restricted to approved documentation tasks.
+README changes are explicitly restricted to this approved documentation task.
 
 ### Suggested Branch
 
 ```txt
-codex/v2-14-readme-v2-testing-section
+codex/v2-17-readme-v2-testing-section
 ```
 
 ### Suggested Skill
@@ -2239,7 +2895,7 @@ npm run build
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Task: V2-14 — Update README with approved V2 testing/setup section.
+Task: V2-17 — Update README with approved V2 testing/setup section.
 
 This is the dedicated README task.
 
@@ -2261,7 +2917,7 @@ Do not exaggerate claims.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-14.
+Review V2-17.
 
 Focus on:
 - README accuracy
@@ -2273,7 +2929,7 @@ Focus on:
 
 ---
 
-## V2-15 — Final V2 Regression and Release Audit
+## V2-18 — Final V2 Regression and Release Audit
 
 ### Goal
 
@@ -2286,7 +2942,7 @@ V2 should end with evidence that the repo is stable, not just with many commits.
 ### Suggested Branch
 
 ```txt
-codex/v2-15-final-regression-audit
+codex/v2-18-final-regression-audit
 ```
 
 ### Suggested Skill
@@ -2304,7 +2960,8 @@ Allowed files:
 - `docs/v2-final-regression.md`
 - `docs/v2-test-evidence.md`
 - `docs/regression-checklist.md` if marking final run
-- `README.md` only for tiny factual corrections discovered during final audit
+
+`README.md` must not be edited in this task unless the user explicitly approves README corrections. If README issues are found, record them as follow-up notes in `docs/v2-final-regression.md`.
 
 Source code fixes should become separate fix branches unless the issue is trivial and explicitly approved.
 
@@ -2329,6 +2986,7 @@ Final regression doc should include:
 - manual tests run
 - failures or skipped checks
 - known risks
+- README issues, if any, as follow-up notes only
 - release verdict
 
 Verdict options:
@@ -2347,6 +3005,7 @@ Do not:
 - do broad refactor
 - change dependencies
 - rewrite docs broadly
+- edit README unless explicitly approved
 - hide failed checks
 - mark unrun tests as passed
 
@@ -2358,6 +3017,7 @@ Do not:
 - known risks are honest
 - release verdict is clear
 - no unexpected untracked files remain
+- README issues, if any, are recorded as follow-up notes unless explicitly approved for correction
 
 ### Verification Commands
 
@@ -2376,7 +3036,7 @@ npm run build
 If E2E cannot run:
 
 ```txt
-Mark E2E as skipped and explain why.
+Mark E2E as SKIPPED and explain why.
 ```
 
 ### Manual Test Checklist
@@ -2401,7 +3061,7 @@ At minimum, cover:
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Task: V2-15 — Final V2 regression and release audit.
+Task: V2-18 — Final V2 regression and release audit.
 
 Read:
 - docs/v2-spec.md
@@ -2421,6 +3081,9 @@ Do not add features.
 Do not hide failed checks.
 Do not mark skipped checks as passed.
 Do not modify source code unless explicitly approved.
+Do not edit README unless the user explicitly approves README corrections.
+
+If README issues are found, record them as follow-up notes in docs/v2-final-regression.md.
 ```
 
 ### Review Prompt
@@ -2428,13 +3091,14 @@ Do not modify source code unless explicitly approved.
 ```txt
 Use AGENTS.md and the applyflow-qa-reviewer skill.
 
-Review V2-15.
+Review V2-18.
 
 Focus on:
 - honesty of final regression evidence
 - exact command results
 - skipped checks clearly explained
 - no hidden source changes
+- no unauthorized README edits
 - release verdict supported by evidence
 ```
 
@@ -2460,6 +3124,9 @@ V2-12
 V2-13
 V2-14
 V2-15
+V2-16
+V2-17
+V2-18
 ```
 
 ---
@@ -2481,7 +3148,9 @@ Before frontend polish:
 
 - confirm backend contracts are stable
 - confirm validation/error behavior
-- confirm search/filter/sort behavior
+- confirm application search/filter/sort behavior
+- confirm application detail/update/delete behavior
+- confirm event CRUD/access-control behavior
 - confirm cascade delete behavior
 
 ### Gate C — After Phase 3
