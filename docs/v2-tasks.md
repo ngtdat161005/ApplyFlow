@@ -217,6 +217,60 @@ V2 is split into 6 phases and 18 tasks.
 
 ---
 
+## 5.1 V2-02 Strategy Confirmation
+
+V2-02 confirms the existing 18-task order. The V2-01 baseline audit did not find repository evidence that justifies merging tasks, reordering major phases, or starting a rewrite. The remaining plan stays:
+
+1. backend contracts first
+2. frontend page-state polish after backend contracts
+3. dashboard and attention work after application/event foundations
+4. QA evidence expansion after core behavior stabilizes
+5. README and final release audit last
+
+### Baseline-Carried Decisions
+
+- Dashboard count naming is unresolved for runtime behavior. Current code uses `countsByStatus`; V2 examples use `statusCounts`. V2-12 owns the backend contract decision: preserve `countsByStatus`, migrate to `statusCounts`, or support a compatibility window. V2-13 must follow the V2-12 decision. V2-02 must not change the runtime contract.
+- `recentApplications` exists in current code, but it is not guaranteed V1 baseline behavior. Treat it as current implementation and V2 polish to evaluate in V2-12 and verify in V2-13 if still exposed.
+- `followUpAt` sorting is not guaranteed V1 baseline behavior. It belongs only to V2-04 as an explicit application-list contract improvement. Other tasks must not describe it as baseline.
+- Backend E2E, browser/manual regression, and remote CI were not executed during V2-01. Later tasks may use source inspection as supporting evidence, but they must not claim those areas passed until the checks actually run.
+- Frontend tasks V2-07 through V2-13 require small page-specific manual QA evidence when a browser environment is available. V2-15 still owns the broader manual regression checklist expansion.
+- README setup and testing accuracy must be verified later, but actual README edits are reserved exclusively for V2-17 unless the user explicitly approves otherwise.
+- Markdown encoding and malformed heading cleanup is useful only when it blocks reviewability. Broad cleanup of old V1/V2 docs is deferred unless a later docs task explicitly allows it.
+
+### Remaining Task Scope and Verification Matrix
+
+| Task | Scope | Required automated checks | Required manual verification |
+|---|---|---|---|
+| V2-03 | Backend shared error, validation, ObjectId behavior | `cd backend; npm run check:attention`; `npm run check:backend-hardening`; `npm run check:e2e` if backend/database are available | API spot checks for auth errors, malformed IDs, validation shape, not-found, and cross-user behavior when environment is available |
+| V2-04 | Backend application list query contract | Backend checks; E2E if available | API/manual checks for search, status filter, created/updated sort, optional `followUpAt` sort if implemented, invalid query errors, and user scoping |
+| V2-05 | Backend application detail/update/delete/cascade contract | Backend checks; E2E if available | API/manual checks for detail, update, delete, cascade delete, invalid IDs, and cross-user access |
+| V2-06 | Backend event CRUD, ownership, validation, timeline contract | Backend checks; E2E if available | API/manual checks for event CRUD, nested ownership mismatch, event validation, timeline order, and cross-user access |
+| V2-07 | Frontend auth and protected-route states | `cd frontend; npm run build` | Page-specific browser notes for login, register, logout, protected redirect, loading/error states, and refresh |
+| V2-08 | Frontend application list states and controls | Frontend build | Page-specific browser notes for list load, empty/filtered empty, search/filter/sort controls, create/edit/delete entry points, error state, and responsive sanity |
+| V2-09 | Frontend application detail states and navigation | Frontend build | Page-specific browser notes for detail load, invalid/not-found URL, refresh, edit/delete navigation, event section presence, and error state |
+| V2-10 | Frontend event timeline form/list UX | Frontend build | Page-specific browser notes for event create/edit/delete, empty timeline, validation errors, loading/error state, and date/contact/logistics fields |
+| V2-11 | Backend attention/date/timeline rules | Backend attention and hardening checks; E2E if available | API/manual scenario notes for attention flag eligibility, closed statuses, effective dates, and upcoming-event separation when environment is available |
+| V2-12 | Backend dashboard summary contract | Backend checks; E2E if available | API/manual checks for dashboard empty/data states, status count naming decision, `recentApplications` handling, upcoming events, attention flags, and user scoping |
+| V2-13 | Frontend dashboard display states | Frontend build | Page-specific browser notes for dashboard empty/data/error states, status counts per V2-12 contract, upcoming events, attention flags, optional recent applications, refresh, and responsive sanity |
+| V2-14 | QA automation scope: backend E2E/smoke checks | Backend attention, hardening, and E2E when environment is available | Confirm disposable data, readable failures, and skip reason if backend/database are unavailable |
+| V2-15 | Docs-only QA scope: manual regression checklist expansion | `git status`; `git diff --stat` | Checklist review for clarity, page/flow coverage, and tester result fields; no browser run required unless environment is available |
+| V2-16 | Docs-only QA scope: V2 test evidence docs | `git status`; `git diff --stat` | Review that automated and manual evidence are separated, limitations are honest, and no unrun tests are marked passed |
+| V2-17 | Docs-only README scope: setup/testing update only | README diff; optional backend/frontend checks if environment is available | Verify README commands, setup notes, links, E2E requirements, and known limitations against the repo |
+| V2-18 | QA audit/docs scope: final V2 regression and release audit | Backend checks, frontend build, E2E if available, final git status/diff | Run or explicitly skip final manual regression, remote CI inspection, and README issue recording |
+
+### High-Risk Regression Ownership
+
+| Risk | Owning task(s) | Required handling |
+|---|---|---|
+| Dashboard `countsByStatus` vs `statusCounts` naming | V2-12, V2-13 | Make and document the contract decision before frontend alignment; do not silently rename in earlier tasks |
+| `recentApplications` current behavior vs V2 polish | V2-12, V2-13 | Decide whether to preserve/harden/expose it; verify ordering and empty state if present |
+| `followUpAt` sorting | V2-04, V2-08 if frontend exposes it | Treat as V2 extension only; update backend checks and frontend manual notes if implemented |
+| Unrun backend E2E from V2-01 | V2-03 through V2-06, V2-11, V2-12, V2-14, V2-18 | Run when backend/database are available or mark SKIPPED with reason |
+| Unrun browser/manual regression from V2-01 | V2-07 through V2-13, V2-15, V2-18 | Capture page-specific notes during page tasks; expand full checklist in V2-15 |
+| Remote CI not inspected in V2-01 | V2-18, and any PR workflow review | Do not claim remote CI passed until inspected |
+| README testing/setup accuracy | V2-17 | Verify commands and correct README only in V2-17 |
+| Mojibake or malformed headings | V2-02 for review-blocking task docs only; later docs tasks if approved | Avoid broad formatting churn; do not change product behavior |
+
 # Phase 0 — Baseline & Task Planning
 
 ---
@@ -2129,6 +2183,16 @@ Backend dashboard must provide:
 - upcoming events
 - attention flags
 
+#### Status Count Naming Decision
+
+V2-01 found that current backend/frontend code uses `countsByStatus`, while V2 examples use `statusCounts`. This task owns the contract decision. It must explicitly choose one of these outcomes and document the choice in the task summary:
+
+- preserve `countsByStatus`
+- migrate to `statusCounts`
+- temporarily support both for compatibility
+
+Do not change the dashboard response name accidentally as a side effect of other dashboard work.
+
 `recentApplications` is a V2 dashboard polish item, not a V1 baseline. It may be included only if this task explicitly implements or verifies it.
 
 #### Dashboard Date Rules
@@ -2296,6 +2360,7 @@ Likely files:
 Frontend dashboard must:
 
 - display backend-derived status counts
+- consume the status-count field chosen by V2-12 (`countsByStatus`, `statusCounts`, or both during a compatibility window)
 - display upcoming events from `upcomingEvents`
 - display attention flags from `attentionFlags`
 - display `recentApplications` only if backend response supports it
