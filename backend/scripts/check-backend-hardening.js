@@ -18,10 +18,17 @@ const {
   buildApplicationsFilter,
   buildApplicationsSort,
 } = await import("../src/modules/application/application.repository.js");
-const { validateListApplicationsQuery } = await import(
+const {
+  validateApplicationIdParams,
+  validateListApplicationsQuery,
+  validateUpdateApplicationPayload,
+} = await import(
   "../src/modules/application/application.validator.js"
 );
-const { validateQuery } = await import("../src/middlewares/validate.middleware.js");
+const { buildApplicationEventsForUserFilter } = await import(
+  "../src/modules/event/event.repository.js"
+);
+const { validateBody, validateQuery } = await import("../src/middlewares/validate.middleware.js");
 const { toObjectId } = await import("../src/utils/object-id.utils.js");
 
 const VALID_USER_ID = "0123456789abcdef01234567";
@@ -212,6 +219,110 @@ async function checkApplicationListContract() {
   }
 }
 
+async function checkApplicationCrudContract() {
+  const validParams = validateApplicationIdParams({
+    applicationId: `  ${VALID_APPLICATION_ID}  `,
+  });
+
+  assert.deepEqual(validParams, {
+    value: {
+      applicationId: VALID_APPLICATION_ID,
+    },
+    errors: {},
+  });
+  assert.deepEqual(validateApplicationIdParams({ applicationId: "not-an-object-id" }).errors, {
+    applicationId: "Application ID must be a valid ObjectId",
+  });
+
+  const normalizedUpdate = validateUpdateApplicationPayload({
+    company: "  ApplyFlow Company  ",
+    role: "  Backend Engineer  ",
+    jdUrl: null,
+    source: null,
+    notes: null,
+    currentStatus: "in_process",
+    followUpAt: null,
+  });
+
+  assert.deepEqual(normalizedUpdate, {
+    value: {
+      company: "ApplyFlow Company",
+      role: "Backend Engineer",
+      currentStatus: "in_process",
+      jdUrl: null,
+      source: null,
+      notes: null,
+      followUpAt: null,
+    },
+    errors: {},
+  });
+
+  for (const currentStatus of [
+    "saved",
+    "applied",
+    "in_process",
+    "offer",
+    "rejected",
+    "withdrawn",
+  ]) {
+    assert.deepEqual(validateUpdateApplicationPayload({ currentStatus }).errors, {});
+  }
+
+  assert.deepEqual(validateUpdateApplicationPayload({ company: "   " }).errors, {
+    company: "Company must be a non-empty string",
+  });
+  assert.deepEqual(validateUpdateApplicationPayload({ role: "   " }).errors, {
+    role: "Role must be a non-empty string",
+  });
+  assert.deepEqual(validateUpdateApplicationPayload({ currentStatus: "interviewing" }).errors, {
+    currentStatus: "Current status is invalid",
+  });
+  assert.deepEqual(validateUpdateApplicationPayload({ followUpAt: "" }).errors, {
+    followUpAt: "Follow-up date must be a valid date or null",
+  });
+  assert.deepEqual(validateUpdateApplicationPayload({ followUpAt: "not-a-date" }).errors, {
+    followUpAt: "Follow-up date must be a valid date or null",
+  });
+
+  for (const fieldName of ["_id", "userId", "createdAt", "updatedAt", "unsafeField"]) {
+    assert.deepEqual(validateUpdateApplicationPayload({ [fieldName]: "unsafe" }).errors, {
+      body: `Unsupported field(s): ${fieldName}`,
+    });
+  }
+
+  let validationError;
+  validateBody(validateUpdateApplicationPayload)(
+    {
+      body: {
+        userId: VALID_USER_ID,
+      },
+    },
+    {},
+    (error) => {
+      validationError = error;
+    },
+  );
+
+  assert.ok(validationError instanceof ValidationError);
+  const validationResponse = await runMiddleware(validationError);
+  assert.equal(validationResponse.statusCode, 400);
+  assert.deepEqual(validationResponse.body, {
+    message: "Validation failed",
+    errors: {
+      body: "Unsupported field(s): userId",
+    },
+  });
+
+  const userObjectId = new ObjectId(VALID_USER_ID);
+  const applicationObjectId = new ObjectId(VALID_APPLICATION_ID);
+  const cascadeFilter = buildApplicationEventsForUserFilter(userObjectId, applicationObjectId);
+
+  assert.deepEqual(cascadeFilter, {
+    userId: userObjectId,
+    applicationId: applicationObjectId,
+  });
+}
+
 async function checkErrorMiddleware() {
   const { notFoundHandler } = await import("../src/middlewares/error.middleware.js");
   const domainResponse = await runMiddleware(
@@ -366,7 +477,9 @@ function checkProductionErrorMiddleware() {
 }
 
 async function checkServiceMalformedIdFallbacks() {
-  const { getApplication } = await import("../src/modules/application/application.service.js");
+  const { deleteApplication, getApplication, updateApplication } = await import(
+    "../src/modules/application/application.service.js"
+  );
   const {
     deleteApplicationEvent,
     listApplicationEvents,
@@ -375,6 +488,16 @@ async function checkServiceMalformedIdFallbacks() {
 
   await assertRejectsWithBadRequest(
     () => getApplication(VALID_USER_ID, "not-an-object-id"),
+    "Application ID must be a valid ObjectId",
+  );
+
+  await assertRejectsWithBadRequest(
+    () => updateApplication(VALID_USER_ID, "not-an-object-id", { company: "ApplyFlow" }),
+    "Application ID must be a valid ObjectId",
+  );
+
+  await assertRejectsWithBadRequest(
+    () => deleteApplication(VALID_USER_ID, "not-an-object-id"),
     "Application ID must be a valid ObjectId",
   );
 
@@ -405,6 +528,7 @@ async function checkAuthRepositoryMalformedIdFallback() {
 
 checkObjectIdUtility();
 await checkApplicationListContract();
+await checkApplicationCrudContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
 checkProductionErrorMiddleware();

@@ -252,7 +252,7 @@ export function validateUpdateApplicationPayload(payload) {
   if (Object.prototype.hasOwnProperty.call(payload, "followUpAt")) {
     const followUpAt = parseOptionalDate(payload.followUpAt);
 
-    if (payload.followUpAt !== null && payload.followUpAt !== "" && !followUpAt) {
+    if (payload.followUpAt !== null && !followUpAt) {
       errors.followUpAt = "Follow-up date must be a valid date or null";
     } else {
       updates.followUpAt = followUpAt;

@@ -28,6 +28,18 @@ function assertControlledError(response, label) {
   );
 }
 
+function assertValidationError(response, fieldName, label) {
+  assertControlledError(response, label);
+  assert(
+    response.body?.message === "Validation failed",
+    `${label} should use validation error shape`,
+  );
+  assert(
+    typeof response.body?.errors?.[fieldName] === "string",
+    `${label} should include an error for ${fieldName}`,
+  );
+}
+
 async function request(method, path, { token, body } = {}) {
   const headers = {};
 
@@ -162,6 +174,27 @@ async function main() {
   });
   assertStatus(malformedApplicationIdResponse, 400, "malformed application id");
   assertControlledError(malformedApplicationIdResponse, "malformed application id");
+
+  const malformedUpdateIdResponse = await request(
+    "PATCH",
+    "/applications/not-an-object-id",
+    {
+      token: primaryToken,
+      body: {
+        company: "ApplyFlow",
+      },
+    },
+  );
+  assertStatus(malformedUpdateIdResponse, 400, "malformed application update id");
+  assertControlledError(malformedUpdateIdResponse, "malformed application update id");
+
+  const malformedDeleteIdResponse = await request(
+    "DELETE",
+    "/applications/not-an-object-id",
+    { token: primaryToken },
+  );
+  assertStatus(malformedDeleteIdResponse, 400, "malformed application delete id");
+  assertControlledError(malformedDeleteIdResponse, "malformed application delete id");
   console.log("PASS auth and application validation errors");
 
   const createApplicationResponse = await request("POST", "/applications", {
@@ -171,19 +204,63 @@ async function main() {
   assertStatus(createApplicationResponse, 201, "create application");
   const application = createApplicationResponse.body?.application;
   assert(application?._id, "create application should return an application id");
-  createdApplications.push(application._id);
+  createdApplications.push({ token: primaryToken, applicationId: application._id });
 
   const applicationId = application._id;
+  const nonexistentApplicationId = "ffffffffffffffffffffffff";
   const secondUser = await createTestUser("secondary");
   const crossUserResponse = await request("GET", `/applications/${applicationId}`, {
     token: secondUser.token,
   });
-  assert(
-    [403, 404].includes(crossUserResponse.status),
-    `cross-user access should return 403 or 404, got ${crossUserResponse.status}`,
-  );
+  assertStatus(crossUserResponse, 404, "cross-user application detail");
   assertControlledError(crossUserResponse, "cross-user application access");
-  console.log("PASS basic cross-user safety");
+
+  const crossUserUpdateResponse = await request("PATCH", `/applications/${applicationId}`, {
+    token: secondUser.token,
+    body: {
+      company: "Cross-user update",
+    },
+  });
+  assertStatus(crossUserUpdateResponse, 404, "cross-user application update");
+  assertControlledError(crossUserUpdateResponse, "cross-user application update");
+
+  const crossUserDeleteResponse = await request("DELETE", `/applications/${applicationId}`, {
+    token: secondUser.token,
+  });
+  assertStatus(crossUserDeleteResponse, 404, "cross-user application delete");
+  assertControlledError(crossUserDeleteResponse, "cross-user application delete");
+
+  const ownerDetailAfterCrossUserDelete = await request("GET", `/applications/${applicationId}`, {
+    token: primaryToken,
+  });
+  assertStatus(ownerDetailAfterCrossUserDelete, 200, "owner detail after cross-user delete");
+
+  const nonexistentDetailResponse = await request(
+    "GET",
+    `/applications/${nonexistentApplicationId}`,
+    { token: primaryToken },
+  );
+  assertStatus(nonexistentDetailResponse, 404, "nonexistent application detail");
+
+  const nonexistentUpdateResponse = await request(
+    "PATCH",
+    `/applications/${nonexistentApplicationId}`,
+    {
+      token: primaryToken,
+      body: {
+        company: "No application",
+      },
+    },
+  );
+  assertStatus(nonexistentUpdateResponse, 404, "nonexistent application update");
+
+  const nonexistentDeleteResponse = await request(
+    "DELETE",
+    `/applications/${nonexistentApplicationId}`,
+    { token: primaryToken },
+  );
+  assertStatus(nonexistentDeleteResponse, 404, "nonexistent application delete");
+  console.log("PASS application detail/update/delete ownership and not-found behavior");
 
   const listResponse = await request("GET", "/applications", { token: primaryToken });
   assertStatus(listResponse, 200, "list applications");
@@ -225,19 +302,99 @@ async function main() {
   assertStatus(detailResponse, 200, "application detail");
   assert(detailResponse.body?.application?._id === applicationId, "detail should return application");
 
+  const blankCompanyResponse = await request("PATCH", `/applications/${applicationId}`, {
+    token: primaryToken,
+    body: {
+      company: "   ",
+    },
+  });
+  assertStatus(blankCompanyResponse, 400, "blank application company");
+  assertValidationError(blankCompanyResponse, "company", "blank application company");
+
+  const forbiddenFieldResponse = await request("PATCH", `/applications/${applicationId}`, {
+    token: primaryToken,
+    body: {
+      userId: secondUser.userId,
+    },
+  });
+  assertStatus(forbiddenFieldResponse, 400, "forbidden application update field");
+  assertValidationError(forbiddenFieldResponse, "body", "forbidden application update field");
+
+  const malformedFollowUpResponse = await request("PATCH", `/applications/${applicationId}`, {
+    token: primaryToken,
+    body: {
+      followUpAt: "",
+    },
+  });
+  assertStatus(malformedFollowUpResponse, 400, "malformed application follow-up date");
+  assertValidationError(
+    malformedFollowUpResponse,
+    "followUpAt",
+    "malformed application follow-up date",
+  );
+
   const updateResponse = await request("PATCH", `/applications/${applicationId}`, {
     token: primaryToken,
     body: {
+      company: "  ApplyFlow E2E Company Updated  ",
+      role: "  Backend Contract Engineer  ",
       currentStatus: "in_process",
-      notes: "Updated by E2E script",
+      jdUrl: null,
+      source: null,
+      notes: null,
+      followUpAt: null,
     },
   });
   assertStatus(updateResponse, 200, "application update");
   assert(
+    updateResponse.body?.application?.company === "ApplyFlow E2E Company Updated",
+    "application update should trim company",
+  );
+  assert(
+    updateResponse.body?.application?.role === "Backend Contract Engineer",
+    "application update should trim role",
+  );
+  assert(
     updateResponse.body?.application?.currentStatus === "in_process",
     "application update should persist status",
   );
-  console.log("PASS application detail/update");
+  for (const nullableField of ["jdUrl", "source", "notes", "followUpAt"]) {
+    assert(
+      updateResponse.body?.application?.[nullableField] === null,
+      `application update should clear ${nullableField} with null`,
+    );
+  }
+  console.log("PASS application detail/update validation and null clearing");
+
+  const secondaryApplicationResponse = await request("POST", "/applications", {
+    token: secondUser.token,
+    body: applicationPayload({
+      company: "Secondary User Company",
+      role: "Secondary User Role",
+    }),
+  });
+  assertStatus(secondaryApplicationResponse, 201, "create secondary application");
+  const secondaryApplicationId = secondaryApplicationResponse.body?.application?._id;
+  assert(secondaryApplicationId, "secondary application should return an application id");
+  createdApplications.push({
+    token: secondUser.token,
+    applicationId: secondaryApplicationId,
+  });
+
+  const secondaryEventResponse = await request(
+    "POST",
+    `/applications/${secondaryApplicationId}/events`,
+    {
+      token: secondUser.token,
+      body: {
+        type: "note",
+        title: "Secondary user event",
+      },
+    },
+  );
+  assertStatus(secondaryEventResponse, 201, "create secondary event");
+  const secondaryEventId = secondaryEventResponse.body?.event?._id;
+  assert(secondaryEventId, "secondary event should return an event id");
 
   const invalidEventTypeResponse = await request("POST", `/applications/${applicationId}/events`, {
     token: primaryToken,
@@ -337,7 +494,11 @@ async function main() {
     token: primaryToken,
   });
   assertStatus(deleteApplicationResponse, 200, "delete application");
-  createdApplications.splice(createdApplications.indexOf(applicationId), 1);
+  const deletedApplicationIndex = createdApplications.findIndex(
+    (item) => item.applicationId === applicationId,
+  );
+  assert(deletedApplicationIndex >= 0, "deleted application should be tracked for cleanup");
+  createdApplications.splice(deletedApplicationIndex, 1);
 
   const deletedDetailResponse = await request("GET", `/applications/${applicationId}`, {
     token: primaryToken,
@@ -366,7 +527,18 @@ async function main() {
     dashboardAfterDelete.attentionFlags.every((item) => item.applicationId !== applicationId),
     "dashboard should not include flags for deleted application",
   );
-  console.log("PASS delete cascade");
+
+  const secondaryEventsAfterDelete = await request(
+    "GET",
+    `/applications/${secondaryApplicationId}/events`,
+    { token: secondUser.token },
+  );
+  assertStatus(secondaryEventsAfterDelete, 200, "secondary events after primary delete");
+  assert(
+    secondaryEventsAfterDelete.body?.events?.some((item) => item._id === secondaryEventId),
+    "deleting the primary application must not delete the secondary user's event",
+  );
+  console.log("PASS user-scoped delete cascade");
 }
 
 try {
@@ -376,7 +548,7 @@ try {
   console.error(`FAIL ${error.message}`);
   process.exitCode = 1;
 } finally {
-  for (const applicationId of [...createdApplications].reverse()) {
-    await cleanupApplication(primaryToken, applicationId);
+  for (const { token, applicationId } of [...createdApplications].reverse()) {
+    await cleanupApplication(token, applicationId);
   }
 }
