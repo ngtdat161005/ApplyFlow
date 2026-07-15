@@ -7,7 +7,7 @@ export const APPLICATION_STATUSES = [
   "withdrawn",
 ];
 
-export const APPLICATION_SORT_FIELDS = ["createdAt", "updatedAt"];
+export const APPLICATION_SORT_FIELDS = ["createdAt", "updatedAt", "followUpAt"];
 export const SORT_ORDERS = ["asc", "desc"];
 
 export const EVENT_TYPES = [

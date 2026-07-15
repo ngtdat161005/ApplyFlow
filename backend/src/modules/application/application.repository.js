@@ -4,7 +4,7 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function buildApplicationsFilter(userId, options) {
+export function buildApplicationsFilter(userId, options) {
   const filter = {
     userId,
   };
@@ -22,7 +22,7 @@ function buildApplicationsFilter(userId, options) {
   return filter;
 }
 
-function buildApplicationsSort(options) {
+export function buildApplicationsSort(options) {
   const direction = options.sortOrder === "asc" ? 1 : -1;
 
   return {

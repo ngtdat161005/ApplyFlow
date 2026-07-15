@@ -146,7 +146,7 @@ export function validateListApplicationsQuery(query) {
   }
 
   if (!APPLICATION_SORT_FIELDS.includes(sortBy)) {
-    errors.sortBy = "Sort field must be createdAt or updatedAt";
+    errors.sortBy = "Sort field must be createdAt, updatedAt, or followUpAt";
   }
 
   if (!SORT_ORDERS.includes(sortOrder)) {

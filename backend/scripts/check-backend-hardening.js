@@ -7,6 +7,12 @@ import {
   UnauthorizedError,
   ValidationError,
 } from "../src/domain/shared/domain-errors.js";
+import {
+  buildApplicationsFilter,
+  buildApplicationsSort,
+} from "../src/modules/application/application.repository.js";
+import { validateListApplicationsQuery } from "../src/modules/application/application.validator.js";
+import { validateQuery } from "../src/middlewares/validate.middleware.js";
 import { toObjectId } from "../src/utils/object-id.utils.js";
 
 process.env.NODE_ENV ??= "development";
@@ -92,6 +98,114 @@ function checkObjectIdUtility() {
     undefined,
   ]) {
     assert.equal(toObjectId(malformedId), null, `Expected ${malformedId} to be rejected`);
+  }
+}
+
+async function checkApplicationListContract() {
+  const userId = new ObjectId(VALID_USER_ID);
+  const defaults = validateListApplicationsQuery({});
+
+  assert.deepEqual(defaults, {
+    value: {
+      search: "",
+      status: null,
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+    },
+    errors: {},
+  });
+
+  const whitespaceSearch = validateListApplicationsQuery({ search: "   " });
+  assert.equal(whitespaceSearch.value.search, "");
+  assert.deepEqual(whitespaceSearch.errors, {});
+  assert.deepEqual(buildApplicationsFilter(userId, whitespaceSearch.value), { userId });
+
+  const normalized = validateListApplicationsQuery({
+    search: "  Frontend (Intern)  ",
+    status: "in_process",
+    sortBy: "followUpAt",
+    sortOrder: "asc",
+  });
+
+  assert.deepEqual(normalized, {
+    value: {
+      search: "Frontend (Intern)",
+      status: "in_process",
+      sortBy: "followUpAt",
+      sortOrder: "asc",
+    },
+    errors: {},
+  });
+
+  for (const status of [
+    "saved",
+    "applied",
+    "in_process",
+    "offer",
+    "rejected",
+    "withdrawn",
+  ]) {
+    assert.deepEqual(validateListApplicationsQuery({ status }).errors, {});
+  }
+
+  assert.deepEqual(validateListApplicationsQuery({ status: "interviewing" }).errors, {
+    status: "Status is invalid",
+  });
+  assert.deepEqual(validateListApplicationsQuery({ sortBy: "company" }).errors, {
+    sortBy: "Sort field must be createdAt, updatedAt, or followUpAt",
+  });
+  assert.deepEqual(validateListApplicationsQuery({ sortOrder: "newest" }).errors, {
+    sortOrder: "Sort order must be asc or desc",
+  });
+  assert.deepEqual(validateListApplicationsQuery({ page: "1" }).errors, {
+    query: "Unsupported query parameter(s): page",
+  });
+
+  let validationError;
+  validateQuery(validateListApplicationsQuery)(
+    { query: { status: "interviewing" } },
+    {},
+    (error) => {
+      validationError = error;
+    },
+  );
+
+  assert.ok(validationError instanceof ValidationError);
+  const validationResponse = await runMiddleware(validationError);
+  assert.equal(validationResponse.statusCode, 400);
+  assert.deepEqual(validationResponse.body, {
+    message: "Validation failed",
+    errors: {
+      status: "Status is invalid",
+    },
+  });
+
+  const filter = buildApplicationsFilter(userId, normalized.value);
+
+  assert.equal(filter.userId, userId);
+  assert.equal(filter.currentStatus, "in_process");
+  assert.equal(filter.$or.length, 2);
+  assert.equal(filter.$or[0].company.flags, "i");
+  assert.equal(filter.$or[1].role.flags, "i");
+  assert.equal(filter.$or[0].company.test("Senior FRONTEND (INTERN)"), true);
+  assert.equal(filter.$or[1].role.test("frontend (intern)"), true);
+  assert.equal(filter.$or[0].company.test("Frontend Intern"), false);
+
+  assert.deepEqual(buildApplicationsFilter(userId, defaults.value), { userId });
+  assert.deepEqual(buildApplicationsSort(defaults.value), {
+    updatedAt: -1,
+    _id: -1,
+  });
+
+  for (const sortBy of ["createdAt", "updatedAt", "followUpAt"]) {
+    assert.deepEqual(buildApplicationsSort({ sortBy, sortOrder: "asc" }), {
+      [sortBy]: 1,
+      _id: 1,
+    });
+    assert.deepEqual(buildApplicationsSort({ sortBy, sortOrder: "desc" }), {
+      [sortBy]: -1,
+      _id: -1,
+    });
   }
 }
 
@@ -287,6 +401,7 @@ async function checkAuthRepositoryMalformedIdFallback() {
 }
 
 checkObjectIdUtility();
+await checkApplicationListContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
 checkProductionErrorMiddleware();
