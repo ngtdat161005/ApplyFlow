@@ -1,25 +1,28 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { ObjectId } from "mongodb";
-import {
+
+process.env.NODE_ENV ||= "development";
+process.env.PORT ||= "4000";
+process.env.MONGODB_URI ||= "mongodb://127.0.0.1:27017";
+process.env.MONGODB_DB_NAME ||= "applyflow_test";
+process.env.JWT_SECRET ||= "test-secret-for-hardening-check";
+
+const {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
   ValidationError,
-} from "../src/domain/shared/domain-errors.js";
-import {
+} = await import("../src/domain/shared/domain-errors.js");
+const {
   buildApplicationsFilter,
   buildApplicationsSort,
-} from "../src/modules/application/application.repository.js";
-import { validateListApplicationsQuery } from "../src/modules/application/application.validator.js";
-import { validateQuery } from "../src/middlewares/validate.middleware.js";
-import { toObjectId } from "../src/utils/object-id.utils.js";
-
-process.env.NODE_ENV ??= "development";
-process.env.PORT ??= "4000";
-process.env.MONGODB_URI ??= "mongodb://localhost:27017";
-process.env.MONGODB_DB_NAME ??= "ApplyFlow";
-process.env.JWT_SECRET ??= "test-secret";
+} = await import("../src/modules/application/application.repository.js");
+const { validateListApplicationsQuery } = await import(
+  "../src/modules/application/application.validator.js"
+);
+const { validateQuery } = await import("../src/middlewares/validate.middleware.js");
+const { toObjectId } = await import("../src/utils/object-id.utils.js");
 
 const VALID_USER_ID = "0123456789abcdef01234567";
 const VALID_APPLICATION_ID = "abcdefabcdefabcdefabcdef";
