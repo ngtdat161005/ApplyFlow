@@ -1,6 +1,13 @@
 import { getApplicationEventsCollection } from "../../db/collections.js";
 import { sortTimelineEvents } from "../../domain/timeline/timeline.utils.js";
 
+export function buildApplicationEventsForUserFilter(userId, applicationId) {
+  return {
+    userId,
+    applicationId,
+  };
+}
+
 export async function createEventDocument(event) {
   const result = await getApplicationEventsCollection().insertOne(event);
 
@@ -60,10 +67,9 @@ export async function deleteEventByIdForUser(userId, applicationId, eventId) {
 }
 
 export async function deleteEventsByApplicationForUser(userId, applicationId) {
-  const result = await getApplicationEventsCollection().deleteMany({
-    userId,
-    applicationId,
-  });
+  const result = await getApplicationEventsCollection().deleteMany(
+    buildApplicationEventsForUserFilter(userId, applicationId),
+  );
 
   return result.deletedCount;
 }
