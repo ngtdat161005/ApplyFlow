@@ -25,8 +25,17 @@ const {
 } = await import(
   "../src/modules/application/application.validator.js"
 );
-const { buildApplicationEventsForUserFilter } = await import(
+const { buildApplicationEventsForUserFilter, buildEventForUserFilter } = await import(
   "../src/modules/event/event.repository.js"
+);
+const {
+  validateApplicationEventDetailParams,
+  validateApplicationEventParams,
+  validateCreateEventPayload,
+  validateUpdateEventPayload,
+} = await import("../src/modules/event/event.validator.js");
+const { getEventEffectiveDate, sortTimelineEvents } = await import(
+  "../src/domain/timeline/timeline.utils.js"
 );
 const { validateBody, validateQuery } = await import("../src/middlewares/validate.middleware.js");
 const { toObjectId } = await import("../src/utils/object-id.utils.js");
@@ -323,6 +332,245 @@ async function checkApplicationCrudContract() {
   });
 }
 
+async function checkEventCrudContract() {
+  assert.deepEqual(
+    validateApplicationEventParams({ applicationId: ` ${VALID_APPLICATION_ID} ` }),
+    {
+      value: {
+        applicationId: VALID_APPLICATION_ID,
+      },
+      errors: {},
+    },
+  );
+  assert.deepEqual(
+    validateApplicationEventDetailParams({
+      applicationId: VALID_APPLICATION_ID,
+      eventId: VALID_EVENT_ID,
+    }).errors,
+    {},
+  );
+  assert.deepEqual(
+    validateApplicationEventDetailParams({
+      applicationId: "not-an-object-id",
+      eventId: "also-not-an-object-id",
+    }).errors,
+    {
+      applicationId: "Application ID must be a valid ObjectId",
+      eventId: "Event ID must be a valid ObjectId",
+    },
+  );
+
+  const validCreate = validateCreateEventPayload({
+    type: "interview",
+    title: "  Technical Interview  ",
+    occurredAt: "2026-07-15T08:00:00.000Z",
+    scheduledAt: null,
+    mode: "online",
+    location: "  Remote  ",
+    meetingLink: "  https://meet.example.test/interview  ",
+    contactName: "  Recruiter  ",
+    contactPhone: "  +84 123 456 789  ",
+    contactEmail: "  RECRUITER@EXAMPLE.TEST  ",
+    note: "  Prepare examples  ",
+  });
+
+  assert.deepEqual(validCreate.errors, {});
+  assert.equal(validCreate.value.title, "Technical Interview");
+  assert.equal(validCreate.value.occurredAt.toISOString(), "2026-07-15T08:00:00.000Z");
+  assert.equal(validCreate.value.scheduledAt, null);
+  assert.equal(validCreate.value.location, "Remote");
+  assert.equal(validCreate.value.meetingLink, "https://meet.example.test/interview");
+  assert.equal(validCreate.value.contactName, "Recruiter");
+  assert.equal(validCreate.value.contactPhone, "+84 123 456 789");
+  assert.equal(validCreate.value.contactEmail, "recruiter@example.test");
+  assert.equal(validCreate.value.note, "Prepare examples");
+
+  for (const type of [
+    "applied",
+    "hr_call",
+    "oa",
+    "interview",
+    "follow_up",
+    "offer",
+    "rejected",
+    "note",
+  ]) {
+    assert.deepEqual(validateCreateEventPayload({ type, title: "Event" }).errors, {});
+  }
+
+  for (const mode of ["online", "offline", "phone"]) {
+    assert.deepEqual(
+      validateCreateEventPayload({ type: "note", title: "Event", mode }).errors,
+      {},
+    );
+  }
+
+  const invalidCreateCases = [
+    [{ type: "unknown", title: "Event" }, "type"],
+    [{ type: "note", title: "   " }, "title"],
+    [{ type: "note", title: "Event", occurredAt: "" }, "occurredAt"],
+    [{ type: "note", title: "Event", scheduledAt: "not-a-date" }, "scheduledAt"],
+    [{ type: "note", title: "Event", mode: "video" }, "mode"],
+    [{ type: "note", title: "Event", contactEmail: "invalid" }, "contactEmail"],
+    [{ type: "note", title: "Event", meetingLink: "not-a-url" }, "meetingLink"],
+  ];
+
+  for (const [payload, fieldName] of invalidCreateCases) {
+    assert.equal(typeof validateCreateEventPayload(payload).errors[fieldName], "string");
+  }
+
+  const nullableUpdate = validateUpdateEventPayload({
+    occurredAt: null,
+    scheduledAt: null,
+    mode: null,
+    location: null,
+    meetingLink: null,
+    contactName: null,
+    contactPhone: null,
+    contactEmail: null,
+    note: null,
+  });
+
+  assert.deepEqual(nullableUpdate, {
+    value: {
+      occurredAt: null,
+      scheduledAt: null,
+      mode: null,
+      location: null,
+      contactName: null,
+      contactPhone: null,
+      note: null,
+      meetingLink: null,
+      contactEmail: null,
+    },
+    errors: {},
+  });
+
+  for (const fieldName of [
+    "_id",
+    "applicationId",
+    "userId",
+    "createdAt",
+    "updatedAt",
+    "unsafeField",
+  ]) {
+    assert.deepEqual(validateUpdateEventPayload({ [fieldName]: "unsafe" }).errors, {
+      body: `Unsupported field(s): ${fieldName}`,
+    });
+  }
+
+  const invalidUpdateCases = [
+    [{ type: "unknown" }, "type"],
+    [{ title: "   " }, "title"],
+    [{ occurredAt: "" }, "occurredAt"],
+    [{ scheduledAt: "not-a-date" }, "scheduledAt"],
+    [{ mode: "video" }, "mode"],
+    [{ contactEmail: "invalid" }, "contactEmail"],
+    [{ meetingLink: "not-a-url" }, "meetingLink"],
+  ];
+
+  for (const [payload, fieldName] of invalidUpdateCases) {
+    assert.equal(typeof validateUpdateEventPayload(payload).errors[fieldName], "string");
+  }
+
+  let validationError;
+  validateBody(validateUpdateEventPayload)(
+    {
+      body: {
+        applicationId: VALID_APPLICATION_ID,
+      },
+    },
+    {},
+    (error) => {
+      validationError = error;
+    },
+  );
+
+  assert.ok(validationError instanceof ValidationError);
+  const validationResponse = await runMiddleware(validationError);
+  assert.deepEqual(validationResponse.body, {
+    message: "Validation failed",
+    errors: {
+      body: "Unsupported field(s): applicationId",
+    },
+  });
+
+  const userObjectId = new ObjectId(VALID_USER_ID);
+  const applicationObjectId = new ObjectId(VALID_APPLICATION_ID);
+  const eventObjectId = new ObjectId(VALID_EVENT_ID);
+
+  assert.deepEqual(buildApplicationEventsForUserFilter(userObjectId, applicationObjectId), {
+    userId: userObjectId,
+    applicationId: applicationObjectId,
+  });
+  assert.deepEqual(buildEventForUserFilter(userObjectId, applicationObjectId, eventObjectId), {
+    _id: eventObjectId,
+    userId: userObjectId,
+    applicationId: applicationObjectId,
+  });
+
+  const timelineEvents = [
+    {
+      _id: "event-occurred",
+      occurredAt: "2026-07-15T12:00:00.000Z",
+      scheduledAt: "2026-07-15T08:00:00.000Z",
+      createdAt: "2026-07-15T07:00:00.000Z",
+    },
+    {
+      _id: "event-scheduled",
+      scheduledAt: "2026-07-15T10:00:00.000Z",
+      createdAt: "2026-07-15T06:00:00.000Z",
+    },
+    {
+      _id: "event-created",
+      createdAt: "2026-07-15T09:00:00.000Z",
+    },
+    {
+      _id: "event-tie-later-created",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+      createdAt: "2026-07-15T07:00:00.000Z",
+    },
+    {
+      _id: "event-tie-earlier-created",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+      createdAt: "2026-07-15T06:00:00.000Z",
+    },
+    {
+      _id: "event-tie-id-b",
+      occurredAt: "2026-07-15T14:00:00.000Z",
+      createdAt: "2026-07-15T06:00:00.000Z",
+    },
+    {
+      _id: "event-tie-id-a",
+      occurredAt: "2026-07-15T14:00:00.000Z",
+      createdAt: "2026-07-15T06:00:00.000Z",
+    },
+  ];
+  const originalOrder = timelineEvents.map((event) => event._id);
+  const sortedEvents = sortTimelineEvents(timelineEvents);
+
+  assert.equal(
+    getEventEffectiveDate(timelineEvents[0]).toISOString(),
+    "2026-07-15T12:00:00.000Z",
+  );
+  assert.deepEqual(
+    sortedEvents.map((event) => event._id),
+    [
+      "event-created",
+      "event-scheduled",
+      "event-occurred",
+      "event-tie-earlier-created",
+      "event-tie-later-created",
+      "event-tie-id-a",
+      "event-tie-id-b",
+    ],
+  );
+  assert.deepEqual(
+    timelineEvents.map((event) => event._id),
+    originalOrder,
+  );
+}
+
 async function checkErrorMiddleware() {
   const { notFoundHandler } = await import("../src/middlewares/error.middleware.js");
   const domainResponse = await runMiddleware(
@@ -481,6 +729,7 @@ async function checkServiceMalformedIdFallbacks() {
     "../src/modules/application/application.service.js"
   );
   const {
+    createApplicationEvent,
     deleteApplicationEvent,
     listApplicationEvents,
     updateApplicationEvent,
@@ -507,6 +756,15 @@ async function checkServiceMalformedIdFallbacks() {
   );
 
   await assertRejectsWithBadRequest(
+    () =>
+      createApplicationEvent(VALID_USER_ID, "not-an-object-id", {
+        type: "note",
+        title: "Invalid parent",
+      }),
+    "Application ID must be a valid ObjectId",
+  );
+
+  await assertRejectsWithBadRequest(
     () => updateApplicationEvent(VALID_USER_ID, VALID_APPLICATION_ID, "not-an-object-id", {
       title: "Updated title",
     }),
@@ -529,6 +787,7 @@ async function checkAuthRepositoryMalformedIdFallback() {
 checkObjectIdUtility();
 await checkApplicationListContract();
 await checkApplicationCrudContract();
+await checkEventCrudContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
 checkProductionErrorMiddleware();

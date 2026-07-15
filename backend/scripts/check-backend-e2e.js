@@ -124,6 +124,13 @@ async function cleanupApplication(token, applicationId) {
   }
 }
 
+function forgetCreatedApplication(applicationId) {
+  const index = createdApplications.findIndex((item) => item.applicationId === applicationId);
+
+  assert(index >= 0, `application ${applicationId} should be tracked for cleanup`);
+  createdApplications.splice(index, 1);
+}
+
 function applicationPayload(overrides = {}) {
   return {
     company: "ApplyFlow E2E Company",
@@ -381,6 +388,21 @@ async function main() {
     applicationId: secondaryApplicationId,
   });
 
+  const wrongParentApplicationResponse = await request("POST", "/applications", {
+    token: primaryToken,
+    body: applicationPayload({
+      company: "Wrong Parent Company",
+      role: "Wrong Parent Role",
+    }),
+  });
+  assertStatus(wrongParentApplicationResponse, 201, "create wrong-parent application");
+  const wrongParentApplicationId = wrongParentApplicationResponse.body?.application?._id;
+  assert(wrongParentApplicationId, "wrong-parent application should return an application id");
+  createdApplications.push({
+    token: primaryToken,
+    applicationId: wrongParentApplicationId,
+  });
+
   const secondaryEventResponse = await request(
     "POST",
     `/applications/${secondaryApplicationId}/events`,
@@ -396,15 +418,87 @@ async function main() {
   const secondaryEventId = secondaryEventResponse.body?.event?._id;
   assert(secondaryEventId, "secondary event should return an event id");
 
-  const invalidEventTypeResponse = await request("POST", `/applications/${applicationId}/events`, {
-    token: primaryToken,
-    body: {
-      type: "invalid_event_type",
-      title: "Invalid event",
+  const malformedEventApplicationIdResponse = await request(
+    "GET",
+    "/applications/not-an-object-id/events",
+    { token: primaryToken },
+  );
+  assertStatus(malformedEventApplicationIdResponse, 400, "malformed event application id");
+  assertControlledError(malformedEventApplicationIdResponse, "malformed event application id");
+
+  const nonexistentParentEventsResponse = await request(
+    "GET",
+    `/applications/${nonexistentApplicationId}/events`,
+    { token: primaryToken },
+  );
+  assertStatus(nonexistentParentEventsResponse, 404, "nonexistent event parent");
+  assertControlledError(nonexistentParentEventsResponse, "nonexistent event parent");
+
+  const crossUserCreateEventResponse = await request(
+    "POST",
+    `/applications/${secondaryApplicationId}/events`,
+    {
+      token: primaryToken,
+      body: {
+        type: "note",
+        title: "Cross-user event",
+      },
     },
-  });
-  assertStatus(invalidEventTypeResponse, 400, "invalid event type");
-  assertControlledError(invalidEventTypeResponse, "invalid event type");
+  );
+  assertStatus(crossUserCreateEventResponse, 404, "cross-user event create");
+  assertControlledError(crossUserCreateEventResponse, "cross-user event create");
+
+  const crossUserListEventsResponse = await request(
+    "GET",
+    `/applications/${secondaryApplicationId}/events`,
+    { token: primaryToken },
+  );
+  assertStatus(crossUserListEventsResponse, 404, "cross-user event list");
+  assertControlledError(crossUserListEventsResponse, "cross-user event list");
+
+  const invalidEventCreateCases = [
+    {
+      label: "invalid event type",
+      fieldName: "type",
+      body: { type: "invalid_event_type", title: "Invalid event" },
+    },
+    {
+      label: "blank event title",
+      fieldName: "title",
+      body: { type: "note", title: "   " },
+    },
+    {
+      label: "malformed event date",
+      fieldName: "scheduledAt",
+      body: { type: "note", title: "Invalid date", scheduledAt: "" },
+    },
+    {
+      label: "invalid event mode",
+      fieldName: "mode",
+      body: { type: "note", title: "Invalid mode", mode: "video" },
+    },
+    {
+      label: "invalid event contact email",
+      fieldName: "contactEmail",
+      body: { type: "note", title: "Invalid email", contactEmail: "invalid" },
+    },
+    {
+      label: "invalid event meeting link",
+      fieldName: "meetingLink",
+      body: { type: "note", title: "Invalid link", meetingLink: "not-a-url" },
+    },
+  ];
+
+  for (const { label, fieldName, body } of invalidEventCreateCases) {
+    const response = await request("POST", `/applications/${applicationId}/events`, {
+      token: primaryToken,
+      body,
+    });
+
+    assertStatus(response, 400, label);
+    assertValidationError(response, fieldName, label);
+  }
+  console.log("PASS event parent ownership and create validation");
 
   const createEventResponse = await request("POST", `/applications/${applicationId}/events`, {
     token: primaryToken,
@@ -421,6 +515,205 @@ async function main() {
   const event = createEventResponse.body?.event;
   assert(event?._id, "create event should return an event id");
 
+  const malformedEventUpdateIdResponse = await request(
+    "PATCH",
+    `/applications/${applicationId}/events/not-an-object-id`,
+    {
+      token: primaryToken,
+      body: {
+        title: "Malformed event id",
+      },
+    },
+  );
+  assertStatus(malformedEventUpdateIdResponse, 400, "malformed event update id");
+
+  const malformedEventDeleteIdResponse = await request(
+    "DELETE",
+    `/applications/${applicationId}/events/not-an-object-id`,
+    { token: primaryToken },
+  );
+  assertStatus(malformedEventDeleteIdResponse, 400, "malformed event delete id");
+
+  const nonexistentEventId = "eeeeeeeeeeeeeeeeeeeeeeee";
+  const nonexistentEventUpdateResponse = await request(
+    "PATCH",
+    `/applications/${applicationId}/events/${nonexistentEventId}`,
+    {
+      token: primaryToken,
+      body: {
+        title: "Nonexistent event",
+      },
+    },
+  );
+  assertStatus(nonexistentEventUpdateResponse, 404, "nonexistent event update");
+
+  const nonexistentEventDeleteResponse = await request(
+    "DELETE",
+    `/applications/${applicationId}/events/${nonexistentEventId}`,
+    { token: primaryToken },
+  );
+  assertStatus(nonexistentEventDeleteResponse, 404, "nonexistent event delete");
+
+  const wrongParentUpdateResponse = await request(
+    "PATCH",
+    `/applications/${wrongParentApplicationId}/events/${event._id}`,
+    {
+      token: primaryToken,
+      body: {
+        title: "Wrong parent update",
+      },
+    },
+  );
+  assertStatus(wrongParentUpdateResponse, 404, "wrong-parent event update");
+
+  const wrongParentDeleteResponse = await request(
+    "DELETE",
+    `/applications/${wrongParentApplicationId}/events/${event._id}`,
+    { token: primaryToken },
+  );
+  assertStatus(wrongParentDeleteResponse, 404, "wrong-parent event delete");
+
+  const crossUserUpdateEventResponse = await request(
+    "PATCH",
+    `/applications/${secondaryApplicationId}/events/${event._id}`,
+    {
+      token: secondUser.token,
+      body: {
+        title: "Cross-user update",
+      },
+    },
+  );
+  assertStatus(crossUserUpdateEventResponse, 404, "cross-user event update");
+
+  const crossUserDeleteEventResponse = await request(
+    "DELETE",
+    `/applications/${secondaryApplicationId}/events/${event._id}`,
+    { token: secondUser.token },
+  );
+  assertStatus(crossUserDeleteEventResponse, 404, "cross-user event delete");
+
+  const invalidEventUpdateCases = [
+    {
+      label: "blank event update title",
+      fieldName: "title",
+      body: { title: "   " },
+    },
+    {
+      label: "forbidden event update field",
+      fieldName: "body",
+      body: { applicationId: wrongParentApplicationId },
+    },
+    {
+      label: "malformed event update date",
+      fieldName: "occurredAt",
+      body: { occurredAt: "" },
+    },
+    {
+      label: "invalid event update mode",
+      fieldName: "mode",
+      body: { mode: "video" },
+    },
+    {
+      label: "invalid event update email",
+      fieldName: "contactEmail",
+      body: { contactEmail: "invalid" },
+    },
+    {
+      label: "invalid event update meeting link",
+      fieldName: "meetingLink",
+      body: { meetingLink: "not-a-url" },
+    },
+  ];
+
+  for (const { label, fieldName, body } of invalidEventUpdateCases) {
+    const response = await request(
+      "PATCH",
+      `/applications/${applicationId}/events/${event._id}`,
+      { token: primaryToken, body },
+    );
+
+    assertStatus(response, 400, label);
+    assertValidationError(response, fieldName, label);
+  }
+
+  const updateEventResponse = await request(
+    "PATCH",
+    `/applications/${applicationId}/events/${event._id}`,
+    {
+      token: primaryToken,
+      body: {
+        type: "note",
+        title: "  Updated Technical Interview  ",
+        occurredAt: null,
+        scheduledAt: null,
+        mode: null,
+        location: null,
+        meetingLink: null,
+        contactName: null,
+        contactPhone: null,
+        contactEmail: null,
+        note: null,
+      },
+    },
+  );
+  assertStatus(updateEventResponse, 200, "update event");
+  assert(
+    updateEventResponse.body?.event?.title === "Updated Technical Interview",
+    "event update should trim and persist title",
+  );
+  assert(updateEventResponse.body?.event?.type === "note", "event update should persist type");
+  for (const nullableField of [
+    "occurredAt",
+    "scheduledAt",
+    "mode",
+    "location",
+    "meetingLink",
+    "contactName",
+    "contactPhone",
+    "contactEmail",
+    "note",
+  ]) {
+    assert(
+      updateEventResponse.body?.event?.[nullableField] === null,
+      `event update should clear ${nullableField} with null`,
+    );
+  }
+
+  const timelineBase = Date.now() + 60 * 60 * 1000;
+  const timelinePayloads = [
+    {
+      type: "note",
+      title: "Timeline created fallback",
+    },
+    {
+      type: "note",
+      title: "Timeline occurred first",
+      occurredAt: new Date(timelineBase).toISOString(),
+    },
+    {
+      type: "note",
+      title: "Timeline scheduled second",
+      scheduledAt: new Date(timelineBase + 60 * 60 * 1000).toISOString(),
+    },
+    {
+      type: "note",
+      title: "Timeline occurred wins",
+      occurredAt: new Date(timelineBase + 2 * 60 * 60 * 1000).toISOString(),
+      scheduledAt: new Date(timelineBase - 30 * 60 * 1000).toISOString(),
+    },
+  ];
+  const timelineEventIds = [];
+
+  for (const body of timelinePayloads) {
+    const response = await request("POST", `/applications/${applicationId}/events`, {
+      token: primaryToken,
+      body,
+    });
+
+    assertStatus(response, 201, `create ${body.title}`);
+    timelineEventIds.push(response.body?.event?._id);
+  }
+
   const listEventsResponse = await request("GET", `/applications/${applicationId}/events`, {
     token: primaryToken,
   });
@@ -429,22 +722,29 @@ async function main() {
     listEventsResponse.body?.events?.some((item) => item._id === event._id),
     "event list should include created event",
   );
+  const listedEventIds = listEventsResponse.body.events.map((item) => item._id);
+  const timelinePositions = timelineEventIds.map((eventId) => listedEventIds.indexOf(eventId));
 
-  const updateEventResponse = await request(
-    "PATCH",
-    `/applications/${applicationId}/events/${event._id}`,
-    {
-      token: primaryToken,
-      body: {
-        title: "Updated Technical Interview",
-        note: "Updated by E2E script",
-      },
-    },
-  );
-  assertStatus(updateEventResponse, 200, "update event");
   assert(
-    updateEventResponse.body?.event?.title === "Updated Technical Interview",
-    "event update should persist title",
+    timelinePositions.every((position) => position >= 0),
+    "timeline list should include every created ordering event",
+  );
+  assert(
+    timelinePositions.every(
+      (position, index) => index === 0 || timelinePositions[index - 1] < position,
+    ),
+    "timeline events should use ascending effective-date order",
+  );
+
+  const refreshedEventsResponse = await request("GET", `/applications/${applicationId}/events`, {
+    token: primaryToken,
+  });
+  assertStatus(refreshedEventsResponse, 200, "refreshed event list");
+  const refreshedEventIds = refreshedEventsResponse.body?.events?.map((item) => item._id) ?? [];
+  assert(
+    refreshedEventIds.length === listedEventIds.length &&
+      refreshedEventIds.every((eventId, index) => eventId === listedEventIds[index]),
+    "timeline ordering should remain stable across refreshes",
   );
 
   const deleteEventResponse = await request(
@@ -453,7 +753,15 @@ async function main() {
     { token: primaryToken },
   );
   assertStatus(deleteEventResponse, 200, "delete event");
-  console.log("PASS event create/list/update/delete");
+  console.log("PASS event ownership, update validation, null clearing, CRUD, and timeline order");
+
+  const deleteWrongParentApplicationResponse = await request(
+    "DELETE",
+    `/applications/${wrongParentApplicationId}`,
+    { token: primaryToken },
+  );
+  assertStatus(deleteWrongParentApplicationResponse, 200, "delete wrong-parent application");
+  forgetCreatedApplication(wrongParentApplicationId);
 
   const cascadeEventResponse = await request("POST", `/applications/${applicationId}/events`, {
     token: primaryToken,
@@ -494,11 +802,7 @@ async function main() {
     token: primaryToken,
   });
   assertStatus(deleteApplicationResponse, 200, "delete application");
-  const deletedApplicationIndex = createdApplications.findIndex(
-    (item) => item.applicationId === applicationId,
-  );
-  assert(deletedApplicationIndex >= 0, "deleted application should be tracked for cleanup");
-  createdApplications.splice(deletedApplicationIndex, 1);
+  forgetCreatedApplication(applicationId);
 
   const deletedDetailResponse = await request("GET", `/applications/${applicationId}`, {
     token: primaryToken,

@@ -58,6 +58,16 @@ function parseOptionalDate(value) {
   return parsedDate;
 }
 
+function isValidUrl(value) {
+  try {
+    const url = new URL(value);
+
+    return Boolean(url.protocol && url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function validateOptionalString(payload, fieldName, errors) {
   if (
     Object.prototype.hasOwnProperty.call(payload, fieldName) &&
@@ -74,7 +84,6 @@ function validateOptionalDate(payload, fieldName, errors) {
   if (
     Object.prototype.hasOwnProperty.call(payload, fieldName) &&
     payload[fieldName] !== null &&
-    payload[fieldName] !== "" &&
     !parsedDate
   ) {
     errors[fieldName] = `${fieldName} must be a valid date or null`;
@@ -137,6 +146,7 @@ export function validateCreateEventPayload(payload) {
   const occurredAt = validateOptionalDate(payload, "occurredAt", errors);
   const scheduledAt = validateOptionalDate(payload, "scheduledAt", errors);
   const mode = normalizeOptionalString(payload.mode);
+  const meetingLink = normalizeOptionalString(payload.meetingLink);
   const contactEmail = normalizeOptionalEmail(payload.contactEmail);
 
   if (unknownFields.length > 0) {
@@ -167,6 +177,10 @@ export function validateCreateEventPayload(payload) {
   validateOptionalString(payload, "contactPhone", errors);
   validateOptionalString(payload, "note", errors);
 
+  if (meetingLink && !isValidUrl(meetingLink)) {
+    errors.meetingLink = "Meeting link must be a valid URL";
+  }
+
   if (payload.contactEmail !== undefined && payload.contactEmail !== null) {
     if (typeof payload.contactEmail !== "string") {
       errors.contactEmail = "Contact email must be a valid email address or null";
@@ -183,7 +197,7 @@ export function validateCreateEventPayload(payload) {
       scheduledAt,
       mode,
       location: normalizeOptionalString(payload.location),
-      meetingLink: normalizeOptionalString(payload.meetingLink),
+      meetingLink,
       contactName: normalizeOptionalString(payload.contactName),
       contactPhone: normalizeOptionalString(payload.contactPhone),
       contactEmail,
@@ -227,7 +241,7 @@ export function validateUpdateEventPayload(payload) {
   if (Object.prototype.hasOwnProperty.call(payload, "occurredAt")) {
     const occurredAt = validateOptionalDate(payload, "occurredAt", errors);
 
-    if (payload.occurredAt === null || payload.occurredAt === "" || occurredAt) {
+    if (payload.occurredAt === null || occurredAt) {
       updates.occurredAt = occurredAt;
     }
   }
@@ -235,7 +249,7 @@ export function validateUpdateEventPayload(payload) {
   if (Object.prototype.hasOwnProperty.call(payload, "scheduledAt")) {
     const scheduledAt = validateOptionalDate(payload, "scheduledAt", errors);
 
-    if (payload.scheduledAt === null || payload.scheduledAt === "" || scheduledAt) {
+    if (payload.scheduledAt === null || scheduledAt) {
       updates.scheduledAt = scheduledAt;
     }
   }
@@ -252,13 +266,25 @@ export function validateUpdateEventPayload(payload) {
     }
   }
 
-  for (const fieldName of ["location", "meetingLink", "contactName", "contactPhone", "note"]) {
+  for (const fieldName of ["location", "contactName", "contactPhone", "note"]) {
     if (Object.prototype.hasOwnProperty.call(payload, fieldName)) {
       validateOptionalString(payload, fieldName, errors);
 
       if (payload[fieldName] === null || typeof payload[fieldName] === "string") {
         updates[fieldName] = normalizeOptionalString(payload[fieldName]);
       }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "meetingLink")) {
+    const meetingLink = normalizeOptionalString(payload.meetingLink);
+
+    validateOptionalString(payload, "meetingLink", errors);
+
+    if (meetingLink && !isValidUrl(meetingLink)) {
+      errors.meetingLink = "Meeting link must be a valid URL";
+    } else if (payload.meetingLink === null || typeof payload.meetingLink === "string") {
+      updates.meetingLink = meetingLink;
     }
   }
 
