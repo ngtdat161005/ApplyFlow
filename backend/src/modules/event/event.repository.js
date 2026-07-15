@@ -8,6 +8,14 @@ export function buildApplicationEventsForUserFilter(userId, applicationId) {
   };
 }
 
+export function buildEventForUserFilter(userId, applicationId, eventId) {
+  return {
+    _id: eventId,
+    userId,
+    applicationId,
+  };
+}
+
 export async function createEventDocument(event) {
   const result = await getApplicationEventsCollection().insertOne(event);
 
@@ -19,10 +27,7 @@ export async function createEventDocument(event) {
 
 export async function findEventsByApplicationForUser(userId, applicationId) {
   const events = await getApplicationEventsCollection()
-    .find({
-      userId,
-      applicationId,
-    })
+    .find(buildApplicationEventsForUserFilter(userId, applicationId))
     .toArray();
 
   return sortTimelineEvents(events);
@@ -40,11 +45,7 @@ export async function findEventsByUser(userId) {
 
 export async function updateEventByIdForUser(userId, applicationId, eventId, updates) {
   const result = await getApplicationEventsCollection().findOneAndUpdate(
-    {
-      _id: eventId,
-      userId,
-      applicationId,
-    },
+    buildEventForUserFilter(userId, applicationId, eventId),
     {
       $set: updates,
     },
@@ -57,11 +58,9 @@ export async function updateEventByIdForUser(userId, applicationId, eventId, upd
 }
 
 export async function deleteEventByIdForUser(userId, applicationId, eventId) {
-  const result = await getApplicationEventsCollection().deleteOne({
-    _id: eventId,
-    userId,
-    applicationId,
-  });
+  const result = await getApplicationEventsCollection().deleteOne(
+    buildEventForUserFilter(userId, applicationId, eventId),
+  );
 
   return result.deletedCount === 1;
 }
