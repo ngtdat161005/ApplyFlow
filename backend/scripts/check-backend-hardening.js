@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import { ObjectId } from "mongodb";
 import {
   BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
   ValidationError,
 } from "../src/domain/shared/domain-errors.js";
 import { toObjectId } from "../src/utils/object-id.utils.js";
@@ -39,6 +41,25 @@ async function runMiddleware(error) {
   errorMiddleware(error, {}, response, () => {});
 
   return response;
+}
+
+async function runAuthMiddleware(headers = {}) {
+  const { requireAuth } = await import("../src/middlewares/auth.middleware.js");
+  const request = {
+    get(name) {
+      return headers[name.toLowerCase()];
+    },
+  };
+
+  let nextError;
+  requireAuth(request, {}, (error) => {
+    nextError = error;
+  });
+
+  return {
+    request,
+    error: nextError,
+  };
 }
 
 async function assertRejectsWithBadRequest(action, expectedMessage) {
@@ -106,6 +127,22 @@ async function checkErrorMiddleware() {
   assert.equal(statusFallbackResponse.body.message, "Unauthorized request");
   assert.equal(statusFallbackResponse.body.stack, undefined);
 
+  const unauthorizedResponse = await runMiddleware(
+    new UnauthorizedError("Authorization token is required"),
+  );
+
+  assert.equal(unauthorizedResponse.statusCode, 401);
+  assert.deepEqual(unauthorizedResponse.body, {
+    message: "Authorization token is required",
+  });
+
+  const notFoundDomainResponse = await runMiddleware(new NotFoundError("Application not found"));
+
+  assert.equal(notFoundDomainResponse.statusCode, 404);
+  assert.deepEqual(notFoundDomainResponse.body, {
+    message: "Application not found",
+  });
+
   const originalConsoleError = console.error;
   console.error = () => {};
   let unexpectedResponse;
@@ -134,6 +171,33 @@ async function checkErrorMiddleware() {
   assert.deepEqual(notFoundResponse.body, {
     message: "Route not found: GET /missing-route",
   });
+}
+
+async function checkAuthMiddleware() {
+  const missingToken = await runAuthMiddleware();
+
+  assert.ok(missingToken.error instanceof UnauthorizedError);
+  assert.equal(missingToken.error.statusCode, 401);
+  assert.equal(missingToken.error.message, "Authorization token is required");
+  assert.equal(missingToken.request.user, undefined);
+
+  const malformedHeader = await runAuthMiddleware({
+    authorization: "Basic abc123",
+  });
+
+  assert.ok(malformedHeader.error instanceof UnauthorizedError);
+  assert.equal(malformedHeader.error.statusCode, 401);
+  assert.equal(malformedHeader.error.message, "Authorization token is required");
+  assert.equal(malformedHeader.request.user, undefined);
+
+  const invalidToken = await runAuthMiddleware({
+    authorization: "Bearer not-a-real-jwt",
+  });
+
+  assert.ok(invalidToken.error instanceof UnauthorizedError);
+  assert.equal(invalidToken.error.statusCode, 401);
+  assert.equal(invalidToken.error.message, "Invalid authorization token");
+  assert.equal(invalidToken.request.user, undefined);
 }
 
 function checkProductionErrorMiddleware() {
@@ -224,6 +288,7 @@ async function checkAuthRepositoryMalformedIdFallback() {
 
 checkObjectIdUtility();
 await checkErrorMiddleware();
+await checkAuthMiddleware();
 checkProductionErrorMiddleware();
 await checkServiceMalformedIdFallbacks();
 await checkAuthRepositoryMalformedIdFallback();
