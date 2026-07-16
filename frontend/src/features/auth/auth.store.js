@@ -13,6 +13,7 @@ import {
   login as loginRequest,
   register as registerRequest,
 } from '../../api/auth.api.js';
+import { subscribeToUnauthorizedResponse } from '../../api/http-client.js';
 import {
   clearStoredAccessToken,
   getStoredAccessToken,
@@ -21,16 +22,20 @@ import {
 import {
   getAuthResponseToken,
   getAuthResponseUser,
-  getErrorMessage,
 } from './auth.utils.js';
 
 const AuthContext = createContext(null);
+const SESSION_EXPIRED_MESSAGE = 'Your session has expired. Please log in again.';
+const SESSION_RESTORE_ERROR =
+  'We could not restore your session. Check the API connection and try again.';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState(() => getStoredAccessToken());
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [bootstrapError, setBootstrapError] = useState(null);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
   const clearSession = useCallback(() => {
     clearStoredAccessToken();
@@ -43,10 +48,23 @@ export function AuthProvider({ children }) {
     setAccessToken(nextAccessToken);
     setUser(nextUser);
     setAuthError(null);
+    setBootstrapError(null);
   }, []);
 
   useEffect(() => {
     let isMounted = true;
+    const unsubscribeFromUnauthorizedResponses = subscribeToUnauthorizedResponse(
+      (failedAccessToken) => {
+        if (!isMounted || getStoredAccessToken() !== failedAccessToken) {
+          return;
+        }
+
+        clearSession();
+        setBootstrapError(null);
+        setAuthError(SESSION_EXPIRED_MESSAGE);
+        setIsLoading(false);
+      },
+    );
 
     async function bootstrapAuth() {
       const storedToken = getStoredAccessToken();
@@ -54,18 +72,22 @@ export function AuthProvider({ children }) {
       if (!storedToken) {
         if (isMounted) {
           clearSession();
+          setBootstrapError(null);
           setIsLoading(false);
         }
 
         return;
       }
 
+      setIsLoading(true);
+      setBootstrapError(null);
+
       try {
         const response = await getCurrentUser();
         const currentUser = getAuthResponseUser(response);
 
         if (!currentUser) {
-          throw new Error('Current user response did not include a user.');
+          throw new Error(SESSION_RESTORE_ERROR);
         }
 
         if (isMounted) {
@@ -73,10 +95,17 @@ export function AuthProvider({ children }) {
           setUser(currentUser);
           setAuthError(null);
         }
-      } catch {
+      } catch (error) {
         if (isMounted) {
-          clearSession();
-          setAuthError(null);
+          if (error?.status === 401) {
+            clearSession();
+            setBootstrapError(null);
+            setAuthError(SESSION_EXPIRED_MESSAGE);
+          } else {
+            setUser(null);
+            setAuthError(null);
+            setBootstrapError(SESSION_RESTORE_ERROR);
+          }
         }
       } finally {
         if (isMounted) {
@@ -89,28 +118,34 @@ export function AuthProvider({ children }) {
 
     return () => {
       isMounted = false;
+      unsubscribeFromUnauthorizedResponses();
     };
-  }, [clearSession]);
+  }, [bootstrapAttempt, clearSession]);
+
+  const retryBootstrap = useCallback(() => {
+    setBootstrapError(null);
+    setIsLoading(true);
+    setBootstrapAttempt((currentAttempt) => currentAttempt + 1);
+  }, []);
+
+  const clearAuthError = useCallback(() => {
+    setAuthError(null);
+  }, []);
 
   const login = useCallback(
     async (credentials) => {
       setAuthError(null);
 
-      try {
-        const response = await loginRequest(credentials);
-        const nextAccessToken = getAuthResponseToken(response);
-        const nextUser = getAuthResponseUser(response);
+      const response = await loginRequest(credentials);
+      const nextAccessToken = getAuthResponseToken(response);
+      const nextUser = getAuthResponseUser(response);
 
-        if (!nextAccessToken || !nextUser) {
-          throw new Error('Login response did not include a valid session.');
-        }
-
-        persistSession(nextAccessToken, nextUser);
-        return response;
-      } catch (error) {
-        setAuthError(getErrorMessage(error, 'Login failed.'));
-        throw error;
+      if (!nextAccessToken || !nextUser) {
+        throw new Error('We could not start your session. Please try again.');
       }
+
+      persistSession(nextAccessToken, nextUser);
+      return response;
     },
     [persistSession],
   );
@@ -119,21 +154,16 @@ export function AuthProvider({ children }) {
     async (payload) => {
       setAuthError(null);
 
-      try {
-        const response = await registerRequest(payload);
-        const nextAccessToken = getAuthResponseToken(response);
-        const nextUser = getAuthResponseUser(response);
+      const response = await registerRequest(payload);
+      const nextAccessToken = getAuthResponseToken(response);
+      const nextUser = getAuthResponseUser(response);
 
-        if (nextAccessToken && nextUser) {
-          persistSession(nextAccessToken, nextUser);
-          return { response, didAuthenticate: true };
-        }
-
-        return { response, didAuthenticate: false };
-      } catch (error) {
-        setAuthError(getErrorMessage(error, 'Registration failed.'));
-        throw error;
+      if (nextAccessToken && nextUser) {
+        persistSession(nextAccessToken, nextUser);
+        return { response, didAuthenticate: true };
       }
+
+      return { response, didAuthenticate: false };
     },
     [persistSession],
   );
@@ -141,6 +171,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     clearSession();
     setAuthError(null);
+    setBootstrapError(null);
   }, [clearSession]);
 
   const value = useMemo(
@@ -150,11 +181,25 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(accessToken && user),
       isLoading,
       authError,
+      bootstrapError,
+      clearAuthError,
       login,
       register,
       logout,
+      retryBootstrap,
     }),
-    [accessToken, authError, isLoading, login, logout, register, user],
+    [
+      accessToken,
+      authError,
+      bootstrapError,
+      clearAuthError,
+      isLoading,
+      login,
+      logout,
+      register,
+      retryBootstrap,
+      user,
+    ],
   );
 
   return createElement(AuthContext.Provider, { value }, children);

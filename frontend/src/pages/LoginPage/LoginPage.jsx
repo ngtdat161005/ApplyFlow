@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -22,7 +22,7 @@ function getRedirectTarget(location) {
 }
 
 export default function LoginPage() {
-  const { authError, login } = useAuth();
+  const { authError, clearAuthError, login } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [formValues, setFormValues] = useState({
@@ -33,6 +33,7 @@ export default function LoginPage() {
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const successMessage = location.state?.message;
 
   function handleChange(event) {
@@ -45,10 +46,17 @@ export default function LoginPage() {
       ...currentErrors,
       [name]: '',
     }));
+    clearAuthError();
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (submitInFlightRef.current) {
+      return;
+    }
+
+    submitInFlightRef.current = true;
     setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
@@ -66,6 +74,7 @@ export default function LoginPage() {
         getErrorDetails(error, { excludeFields: LOGIN_FIELD_NAMES }),
       );
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -96,7 +105,7 @@ export default function LoginPage() {
           </div>
         ) : null}
 
-        <form className="stacked-form" onSubmit={handleSubmit}>
+        <form className="stacked-form" aria-busy={isSubmitting} onSubmit={handleSubmit}>
           <label>
             Email
             <input
