@@ -3,6 +3,19 @@ import { getStoredAccessToken } from '../utils/storage.utils.js';
 const DEFAULT_API_BASE_URL = '';
 const API_PROXY_PREFIX = '/api';
 const API_PROXY_PATHS = ['/applications', '/dashboard'];
+const unauthorizedResponseListeners = new Set();
+
+export function subscribeToUnauthorizedResponse(listener) {
+  unauthorizedResponseListeners.add(listener);
+
+  return () => {
+    unauthorizedResponseListeners.delete(listener);
+  };
+}
+
+function notifyUnauthorizedResponse(accessToken) {
+  unauthorizedResponseListeners.forEach((listener) => listener(accessToken));
+}
 
 function normalizeBaseUrl(baseUrl) {
   return (baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
@@ -129,6 +142,10 @@ export async function httpRequest(path, options = {}) {
   const payload = await readJsonResponse(response);
 
   if (!response.ok) {
+    if (auth && accessToken && response.status === 401) {
+      notifyUnauthorizedResponse(accessToken);
+    }
+
     throw new ApiError(getErrorMessage(payload, response), {
       status: response.status,
       details: getErrorDetails(payload),

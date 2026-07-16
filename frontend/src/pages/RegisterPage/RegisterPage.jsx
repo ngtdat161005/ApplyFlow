@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,7 +12,7 @@ import {
 const REGISTER_FIELD_NAMES = ['displayName', 'email', 'password'];
 
 export default function RegisterPage() {
-  const { authError, register } = useAuth();
+  const { authError, clearAuthError, register } = useAuth();
   const navigate = useNavigate();
   const [formValues, setFormValues] = useState({
     displayName: '',
@@ -23,6 +23,7 @@ export default function RegisterPage() {
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -34,10 +35,17 @@ export default function RegisterPage() {
       ...currentErrors,
       [name]: '',
     }));
+    clearAuthError();
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (submitInFlightRef.current) {
+      return;
+    }
+
+    submitInFlightRef.current = true;
     setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
@@ -67,6 +75,7 @@ export default function RegisterPage() {
         getErrorDetails(error, { excludeFields: REGISTER_FIELD_NAMES }),
       );
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -91,7 +100,7 @@ export default function RegisterPage() {
           </div>
         ) : null}
 
-        <form className="stacked-form" onSubmit={handleSubmit}>
+        <form className="stacked-form" aria-busy={isSubmitting} onSubmit={handleSubmit}>
           <label>
             Display name
             <input
