@@ -5,15 +5,25 @@ import { APPLICATION_STATUS_OPTIONS } from '../../../constants/status.js';
 const SORT_FIELD_OPTIONS = [
   { value: 'updatedAt', label: 'Updated date' },
   { value: 'createdAt', label: 'Created date' },
+  { value: 'followUpAt', label: 'Follow-up date' },
 ];
 
-const SORT_ORDER_OPTIONS = [
+const DEFAULT_SORT_ORDER_OPTIONS = [
   { value: 'desc', label: 'Newest first' },
   { value: 'asc', label: 'Oldest first' },
 ];
 
+const FOLLOW_UP_SORT_ORDER_OPTIONS = [
+  { value: 'desc', label: 'Latest follow-up first' },
+  { value: 'asc', label: 'Earliest follow-up first' },
+];
+
 export function ApplicationFilters({ filters, isLoading, onApply, onReset }) {
   const [draftFilters, setDraftFilters] = useState(filters);
+  const sortOrderOptions =
+    draftFilters.sortBy === 'followUpAt'
+      ? FOLLOW_UP_SORT_ORDER_OPTIONS
+      : DEFAULT_SORT_ORDER_OPTIONS;
 
   useEffect(() => {
     setDraftFilters(filters);
@@ -91,7 +101,7 @@ export function ApplicationFilters({ filters, isLoading, onApply, onReset }) {
           onChange={handleChange}
           value={draftFilters.sortOrder}
         >
-          {SORT_ORDER_OPTIONS.map((option) => (
+          {sortOrderOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
