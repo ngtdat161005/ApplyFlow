@@ -332,6 +332,7 @@ textarea:disabled {
 .application-card h3,
 .application-card p,
 .applications-state h3,
+.applications-state h4,
 .applications-state p {
   margin: 0;
 }
@@ -597,6 +598,7 @@ textarea[aria-invalid='true'] {
 .application-detail-meta dd,
 .event-meta dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .application-detail-meta a,
@@ -638,6 +640,7 @@ textarea[aria-invalid='true'] {
 
 .event-form-panel {
   background: var(--color-surface-muted);
+  min-width: 0;
 }
 
 .event-item {
@@ -651,8 +654,21 @@ textarea[aria-invalid='true'] {
 .event-item-header time {
   color: var(--color-muted);
   font-size: 14px;
-  text-align: right;
   white-space: nowrap;
+}
+
+.event-item-date {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  text-align: right;
+}
+
+.event-item-date span {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .event-type-label {
@@ -677,6 +693,7 @@ textarea[aria-invalid='true'] {
   display: grid;
   gap: 6px;
   font-weight: 700;
+  min-width: 0;
 }
 
 .event-form input,
@@ -685,6 +702,7 @@ textarea[aria-invalid='true'] {
   border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   color: var(--color-text);
+  min-width: 0;
   padding: 10px 12px;
   width: 100%;
 }
@@ -795,7 +813,8 @@ textarea[aria-invalid='true'] {
   padding: 22px;
 }
 
-.applications-state h3 {
+.applications-state h3,
+.applications-state h4 {
   color: var(--color-text);
   font-size: 18px;
 }
@@ -909,6 +928,11 @@ textarea[aria-invalid='true'] {
   }
 
   .event-item-header time {
+    text-align: left;
+  }
+
+  .event-item-date {
+    justify-items: start;
     text-align: left;
   }
 }

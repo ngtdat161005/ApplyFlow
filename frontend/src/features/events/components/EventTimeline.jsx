@@ -18,8 +18,13 @@ export function EventTimeline({
 }) {
   if (isLoading) {
     return (
-      <section className="applications-state" aria-live="polite">
-        <p>Loading timeline...</p>
+      <section
+        className="applications-state applications-state-loading"
+        aria-live="polite"
+        role="status"
+      >
+        <h4>Loading events</h4>
+        <p>Fetching the recruitment timeline...</p>
       </section>
     );
   }
@@ -27,6 +32,7 @@ export function EventTimeline({
   if (loadError) {
     return (
       <section className="applications-state applications-state-error" role="alert">
+        <h4>Could not load events</h4>
         <p>{loadError}</p>
         <button type="button" onClick={onRetry}>
           Retry
@@ -37,8 +43,9 @@ export function EventTimeline({
 
   if (events.length === 0) {
     return (
-      <section className="applications-state" aria-live="polite">
-        <p>No events yet. Add the first timeline event for this application.</p>
+      <section className="applications-state applications-state-empty" aria-live="polite">
+        <h4>No timeline events</h4>
+        <p>Add the first event to start this application's recruitment history.</p>
       </section>
     );
   }

@@ -14,7 +14,16 @@ export function EventItem({
   onRequestDelete,
   onUpdate,
 }) {
-  const effectiveDate = formatEventDate(getEventEffectiveDate(event));
+  const effectiveDateValue = getEventEffectiveDate(event);
+  const effectiveDate = formatEventDate(effectiveDateValue);
+  const effectiveDateLabel = event.occurredAt
+    ? 'Occurred'
+    : event.scheduledAt
+      ? 'Scheduled'
+      : 'Added';
+  const secondaryScheduledDate = event.occurredAt
+    ? formatEventDate(event.scheduledAt)
+    : null;
   const modeLabel = getEventModeLabel(event.mode);
 
   if (isEditing) {
@@ -38,10 +47,23 @@ export function EventItem({
           <p className="event-type-label">{getEventTypeLabel(event.type)}</p>
           <h4>{event.title}</h4>
         </div>
-        {effectiveDate ? <time dateTime={getEventEffectiveDate(event)}>{effectiveDate}</time> : null}
+        {effectiveDate ? (
+          <div className="event-item-date">
+            <span>{effectiveDateLabel}</span>
+            <time dateTime={effectiveDateValue}>{effectiveDate}</time>
+          </div>
+        ) : null}
       </div>
 
       <dl className="event-meta">
+        {secondaryScheduledDate ? (
+          <div>
+            <dt>Scheduled</dt>
+            <dd>
+              <time dateTime={event.scheduledAt}>{secondaryScheduledDate}</time>
+            </dd>
+          </div>
+        ) : null}
         {modeLabel ? (
           <div>
             <dt>Mode</dt>
@@ -89,7 +111,7 @@ export function EventItem({
       {event.note ? <p className="event-note">{event.note}</p> : null}
 
       {isConfirmingDelete ? (
-        <div className="event-delete-confirm" role="alert">
+        <div aria-busy={isDeleting} className="event-delete-confirm" role="alert">
           <p>Delete this event?</p>
           <div className="application-form-actions">
             <button disabled={isDeleting} type="button" onClick={onConfirmDelete}>

@@ -40,6 +40,7 @@ export default function ApplicationDetailPage() {
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState('');
   const applicationDeleteInFlightRef = useRef(false);
   const applicationRequestIdRef = useRef(0);
+  const eventDeleteInFlightRef = useRef('');
   const eventsRequestIdRef = useRef(0);
 
   const currentApplication =
@@ -139,6 +140,7 @@ export default function ApplicationDetailPage() {
     setIsCreateFormOpen(false);
     setPendingDeleteEventId('');
     applicationDeleteInFlightRef.current = false;
+    eventDeleteInFlightRef.current = '';
 
     loadApplication();
     loadEvents();
@@ -221,6 +223,11 @@ export default function ApplicationDetailPage() {
   }
 
   async function handleDeleteEvent(event) {
+    if (eventDeleteInFlightRef.current) {
+      return;
+    }
+
+    eventDeleteInFlightRef.current = event._id;
     setDeletingEventId(event._id);
     setDeleteError('');
 
@@ -231,6 +238,9 @@ export default function ApplicationDetailPage() {
     } catch (error) {
       setDeleteError(getErrorMessage(error, 'Unable to delete event.'));
     } finally {
+      if (eventDeleteInFlightRef.current === event._id) {
+        eventDeleteInFlightRef.current = '';
+      }
       setDeletingEventId('');
     }
   }

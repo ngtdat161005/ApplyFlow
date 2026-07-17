@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   getErrorDetails,
@@ -135,6 +135,7 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
   const [formError, setFormError] = useState('');
   const [formErrorDetails, setFormErrorDetails] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
 
   function handleChange(changeEvent) {
     const { name, value } = changeEvent.target;
@@ -151,6 +152,11 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
 
   async function handleSubmit(submitEvent) {
     submitEvent.preventDefault();
+
+    if (submitInFlightRef.current) {
+      return;
+    }
+
     setFieldErrors({});
     setFormError('');
     setFormErrorDetails([]);
@@ -174,6 +180,7 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
       return;
     }
 
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -191,6 +198,7 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
         getErrorDetails(submitError, { excludeFields: EVENT_FIELD_NAMES }),
       );
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }
@@ -199,15 +207,16 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
   const submittingLabel = mode === 'edit' ? 'Saving...' : 'Creating...';
 
   return (
-    <form className="event-form" noValidate onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="event-form" noValidate onSubmit={handleSubmit}>
       <div className="event-form-grid">
         <label>
-          Type
+          Type (required)
           <select
             aria-invalid={Boolean(fieldErrors.type)}
             disabled={isSubmitting}
             name="type"
             onChange={handleChange}
+            required
             value={formValues.type}
           >
             {EVENT_TYPE_OPTIONS.map((option) => (
@@ -220,13 +229,14 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
         </label>
 
         <label>
-          Title
+          Title (required)
           <input
             aria-invalid={Boolean(fieldErrors.title)}
             disabled={isSubmitting}
             name="title"
             onChange={handleChange}
             placeholder="Technical Interview"
+            required
             value={formValues.title}
           />
           {fieldErrors.title ? <span className="field-error">{fieldErrors.title}</span> : null}
@@ -286,10 +296,10 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
           <input
             aria-invalid={Boolean(fieldErrors.meetingLink)}
             disabled={isSubmitting}
-            inputMode="url"
             name="meetingLink"
             onChange={handleChange}
             placeholder="https://meet.google.com/example"
+            type="url"
             value={formValues.meetingLink}
           />
           {fieldErrors.meetingLink ? (
@@ -345,10 +355,10 @@ export function EventForm({ event, mode = 'create', onCancel, onSubmit }) {
           <input
             aria-invalid={Boolean(fieldErrors.contactEmail)}
             disabled={isSubmitting}
-            inputMode="email"
             name="contactEmail"
             onChange={handleChange}
             placeholder="hr@example.com"
+            type="email"
             value={formValues.contactEmail}
           />
           {fieldErrors.contactEmail ? (
