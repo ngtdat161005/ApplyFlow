@@ -524,6 +524,11 @@ textarea[aria-invalid='true'] {
   display: flex;
 }
 
+.application-detail-state-unavailable {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
 .application-overview {
   gap: 16px;
 }
