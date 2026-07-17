@@ -331,6 +331,7 @@ textarea:disabled {
 .application-panel-header p,
 .application-card h3,
 .application-card p,
+.applications-state h3,
 .applications-state p {
   margin: 0;
 }
@@ -787,6 +788,26 @@ textarea[aria-invalid='true'] {
   display: grid;
   gap: 12px;
   padding: 22px;
+}
+
+.applications-state h3 {
+  color: var(--color-text);
+  font-size: 18px;
+}
+
+.applications-state button {
+  justify-self: start;
+}
+
+.applications-state-loading,
+.applications-state-empty {
+  background: var(--color-surface-muted);
+  border-style: dashed;
+}
+
+.applications-state-filtered-empty {
+  background: #fffbeb;
+  border-color: #fde68a;
 }
 
 .applications-state-error {

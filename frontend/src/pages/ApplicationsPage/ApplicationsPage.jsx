@@ -106,9 +106,15 @@ export default function ApplicationsPage() {
     }
   }
 
-  const emptyMessage = hasActiveFilters(filters)
-    ? 'No applications match the current search or filters.'
-    : 'No applications yet. Create your first application to start tracking it.';
+  function handleOpenCreateForm() {
+    setEditingApplicationId('');
+    setPendingDeleteApplicationId('');
+    setIsCreateFormOpen(true);
+  }
+
+  function handleResetFilters() {
+    setFilters({ ...DEFAULT_FILTERS });
+  }
 
   return (
     <section className="page-section applications-page" aria-labelledby="applications-title">
@@ -125,9 +131,12 @@ export default function ApplicationsPage() {
           className="button-primary"
           type="button"
           onClick={() => {
-            setEditingApplicationId('');
-            setPendingDeleteApplicationId('');
-            setIsCreateFormOpen((isOpen) => !isOpen);
+            if (isCreateFormOpen) {
+              setIsCreateFormOpen(false);
+              return;
+            }
+
+            handleOpenCreateForm();
           }}
         >
           {isCreateFormOpen ? 'Close form' : 'Create Application'}
@@ -152,7 +161,7 @@ export default function ApplicationsPage() {
           filters={filters}
           isLoading={isLoading}
           onApply={setFilters}
-          onReset={() => setFilters(DEFAULT_FILTERS)}
+          onReset={handleResetFilters}
         />
       </section>
 
@@ -161,13 +170,15 @@ export default function ApplicationsPage() {
         applications={applications}
         deletingApplicationId={deletingApplicationId}
         editingApplicationId={editingApplicationId}
-        emptyMessage={emptyMessage}
         error={fetchError}
+        hasActiveFilters={hasActiveFilters(filters)}
         isDeleteConfirmOpenFor={pendingDeleteApplicationId}
+        isCreateFormOpen={isCreateFormOpen}
         isLoading={isLoading}
         onCancelDelete={() => setPendingDeleteApplicationId('')}
         onCancelEdit={() => setEditingApplicationId('')}
         onConfirmDelete={handleDeleteApplication}
+        onCreate={handleOpenCreateForm}
         onEdit={(application) => {
           setIsCreateFormOpen(false);
           setPendingDeleteApplicationId('');
@@ -179,6 +190,7 @@ export default function ApplicationsPage() {
           setApplicationActionError('');
           setPendingDeleteApplicationId(application._id);
         }}
+        onResetFilters={handleResetFilters}
         onRetry={fetchApplications}
         onUpdate={handleUpdateApplication}
       />

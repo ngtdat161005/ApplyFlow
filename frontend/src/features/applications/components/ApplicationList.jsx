@@ -6,22 +6,30 @@ export function ApplicationList({
   applications,
   deletingApplicationId,
   editingApplicationId,
-  emptyMessage,
   error,
+  hasActiveFilters,
   isDeleteConfirmOpenFor,
+  isCreateFormOpen,
   isLoading,
   onCancelDelete,
   onCancelEdit,
   onConfirmDelete,
+  onCreate,
   onEdit,
   onRequestDelete,
+  onResetFilters,
   onRetry,
   onUpdate,
 }) {
   if (isLoading) {
     return (
-      <div className="applications-state" role="status">
-        Loading applications...
+      <div
+        className="applications-state applications-state-loading"
+        aria-live="polite"
+        role="status"
+      >
+        <h3>Loading applications</h3>
+        <p>Fetching your latest application list...</p>
       </div>
     );
   }
@@ -29,6 +37,7 @@ export function ApplicationList({
   if (error) {
     return (
       <div className="applications-state applications-state-error" role="alert">
+        <h3>Could not load applications</h3>
         <p>{error}</p>
         <button type="button" onClick={onRetry}>
           Try again
@@ -38,7 +47,29 @@ export function ApplicationList({
   }
 
   if (applications.length === 0) {
-    return <div className="applications-state">{emptyMessage}</div>;
+    if (hasActiveFilters) {
+      return (
+        <div className="applications-state applications-state-filtered-empty">
+          <h3>No matching applications</h3>
+          <p>No applications match your current search or status filter.</p>
+          <button type="button" onClick={onResetFilters}>
+            Reset filters
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="applications-state applications-state-empty">
+        <h3>No applications yet</h3>
+        <p>Create your first application to start tracking your search.</p>
+        {!isCreateFormOpen ? (
+          <button type="button" onClick={onCreate}>
+            Create application
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   return (
