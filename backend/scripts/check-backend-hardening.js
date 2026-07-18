@@ -37,6 +37,13 @@ const {
 const { getEventEffectiveDate, sortTimelineEvents } = await import(
   "../src/domain/timeline/timeline.utils.js"
 );
+const { computeAttentionFlags } = await import(
+  "../src/domain/attention/attention.service.js"
+);
+const { APPLICATION_STATUSES } = await import("../src/config/constants.js");
+const { buildDashboardSummary, RECENT_APPLICATION_LIMIT } = await import(
+  "../src/modules/dashboard/dashboard.service.js"
+);
 const { validateBody, validateQuery } = await import("../src/middlewares/validate.middleware.js");
 const { toObjectId } = await import("../src/utils/object-id.utils.js");
 
@@ -571,6 +578,323 @@ async function checkEventCrudContract() {
   );
 }
 
+function checkDashboardContract() {
+  const now = new Date("2026-07-19T12:00:00.000Z");
+  const dayInMilliseconds = 24 * 60 * 60 * 1000;
+  const applicationIds = {
+    saved: "000000000000000000000001",
+    applied: "000000000000000000000002",
+    inProcess: "000000000000000000000003",
+    offer: "000000000000000000000004",
+    rejected: "000000000000000000000005",
+    withdrawn: "000000000000000000000006",
+    secondSaved: "000000000000000000000007",
+  };
+  const application = ({
+    _id,
+    currentStatus,
+    company,
+    role,
+    createdAt,
+    updatedAt,
+    followUpAt = null,
+  }) => ({
+    _id,
+    userId: VALID_USER_ID,
+    currentStatus,
+    company,
+    role,
+    createdAt: new Date(createdAt),
+    updatedAt: new Date(updatedAt),
+    followUpAt: followUpAt ? new Date(followUpAt) : null,
+  });
+  const event = ({
+    _id,
+    applicationId,
+    type = "note",
+    title = "Dashboard event",
+    occurredAt = null,
+    scheduledAt = null,
+    createdAt = "2026-07-19T08:00:00.000Z",
+  }) => ({
+    _id,
+    applicationId,
+    userId: VALID_USER_ID,
+    type,
+    title,
+    occurredAt: occurredAt ? new Date(occurredAt) : null,
+    scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+    createdAt: new Date(createdAt),
+  });
+  const applications = [
+    application({
+      _id: applicationIds.saved,
+      currentStatus: "saved",
+      company: "Saved Company",
+      role: "Saved Role",
+      createdAt: "2026-07-10T08:00:00.000Z",
+      updatedAt: "2026-07-18T08:00:00.000Z",
+      followUpAt: "2026-07-01T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.applied,
+      currentStatus: "applied",
+      company: "Applied Company",
+      role: "Applied Role",
+      createdAt: "2026-07-11T09:00:00.000Z",
+      updatedAt: "2026-07-18T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.inProcess,
+      currentStatus: "in_process",
+      company: "In Process Company",
+      role: "In Process Role",
+      createdAt: "2026-07-11T09:00:00.000Z",
+      updatedAt: "2026-07-18T08:00:00.000Z",
+      followUpAt: "2026-07-10T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.offer,
+      currentStatus: "offer",
+      company: "Offer Company",
+      role: "Offer Role",
+      createdAt: "2026-07-09T08:00:00.000Z",
+      updatedAt: "2026-07-17T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.rejected,
+      currentStatus: "rejected",
+      company: "Rejected Company",
+      role: "Rejected Role",
+      createdAt: "2026-07-08T08:00:00.000Z",
+      updatedAt: "2026-07-16T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.withdrawn,
+      currentStatus: "withdrawn",
+      company: "Withdrawn Company",
+      role: "Withdrawn Role",
+      createdAt: "2026-07-07T08:00:00.000Z",
+      updatedAt: "2026-07-15T08:00:00.000Z",
+    }),
+    application({
+      _id: applicationIds.secondSaved,
+      currentStatus: "saved",
+      company: "Second Saved Company",
+      role: "Second Saved Role",
+      createdAt: "2026-07-06T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z",
+    }),
+  ];
+  const events = [
+    event({
+      _id: "100000000000000000000001",
+      applicationId: applicationIds.saved,
+      title: "Included at now",
+      scheduledAt: now.toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000002",
+      applicationId: applicationIds.applied,
+      title: "Included inside window",
+      scheduledAt: new Date(now.getTime() + 3 * dayInMilliseconds - 1).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000003",
+      applicationId: applicationIds.inProcess,
+      title: "Excluded at upper boundary",
+      scheduledAt: new Date(now.getTime() + 3 * dayInMilliseconds).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000004",
+      applicationId: applicationIds.inProcess,
+      title: "Excluded in past",
+      scheduledAt: new Date(now.getTime() - 1).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000005",
+      applicationId: applicationIds.inProcess,
+      title: "Excluded without schedule",
+    }),
+    event({
+      _id: "100000000000000000000006",
+      applicationId: applicationIds.inProcess,
+      title: "First created tie",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+      createdAt: "2026-07-18T06:00:00.000Z",
+    }),
+    event({
+      _id: "100000000000000000000007",
+      applicationId: applicationIds.inProcess,
+      title: "First id tie",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+      createdAt: "2026-07-18T07:00:00.000Z",
+    }),
+    event({
+      _id: "100000000000000000000008",
+      applicationId: applicationIds.inProcess,
+      title: "Second id tie",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+      createdAt: "2026-07-18T07:00:00.000Z",
+    }),
+    event({
+      _id: "100000000000000000000009",
+      applicationId: applicationIds.offer,
+      title: "Excluded offer event",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000010",
+      applicationId: applicationIds.rejected,
+      title: "Excluded rejected event",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000011",
+      applicationId: applicationIds.withdrawn,
+      title: "Excluded withdrawn event",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+    }),
+    event({
+      _id: "100000000000000000000012",
+      applicationId: "ffffffffffffffffffffffff",
+      title: "Excluded missing parent",
+      scheduledAt: new Date(now.getTime() + dayInMilliseconds).toISOString(),
+    }),
+    event({
+      _id: "200000000000000000000001",
+      applicationId: applicationIds.applied,
+      type: "applied",
+      title: "Applied",
+      occurredAt: "2026-07-01T08:00:00.000Z",
+      createdAt: "2026-07-01T08:00:00.000Z",
+    }),
+    event({
+      _id: "200000000000000000000002",
+      applicationId: applicationIds.inProcess,
+      type: "interview",
+      title: "Interview",
+      occurredAt: "2026-07-10T08:00:00.000Z",
+      createdAt: "2026-07-10T08:00:00.000Z",
+    }),
+  ];
+  const applicationsSnapshot = JSON.stringify(applications);
+  const eventsSnapshot = JSON.stringify(events);
+  const dashboard = buildDashboardSummary(applications, events, now);
+
+  assert.deepEqual(Object.keys(dashboard), [
+    "countsByStatus",
+    "totalApplications",
+    "recentApplications",
+    "upcomingEvents",
+    "attentionFlags",
+  ]);
+  assert.equal(Object.hasOwn(dashboard, "statusCounts"), false);
+  assert.deepEqual(Object.keys(dashboard.countsByStatus), APPLICATION_STATUSES);
+  assert.deepEqual(dashboard.countsByStatus, {
+    saved: 2,
+    applied: 1,
+    in_process: 1,
+    offer: 1,
+    rejected: 1,
+    withdrawn: 1,
+  });
+  assert.equal(
+    dashboard.totalApplications,
+    Object.values(dashboard.countsByStatus).reduce((total, count) => total + count, 0),
+  );
+
+  assert.equal(RECENT_APPLICATION_LIMIT, 5);
+  assert.equal(dashboard.recentApplications.length, RECENT_APPLICATION_LIMIT);
+  assert.deepEqual(
+    dashboard.recentApplications.map((item) => item.applicationId),
+    [
+      applicationIds.applied,
+      applicationIds.inProcess,
+      applicationIds.saved,
+      applicationIds.offer,
+      applicationIds.rejected,
+    ],
+  );
+  assert.deepEqual(Object.keys(dashboard.recentApplications[0]), [
+    "applicationId",
+    "company",
+    "role",
+    "currentStatus",
+    "updatedAt",
+    "followUpAt",
+  ]);
+
+  assert.deepEqual(
+    dashboard.upcomingEvents.map((item) => item.eventId),
+    [
+      "100000000000000000000001",
+      "100000000000000000000006",
+      "100000000000000000000007",
+      "100000000000000000000008",
+      "100000000000000000000002",
+    ],
+  );
+  assert.equal(dashboard.upcomingEvents[0].scheduledAt, now.toISOString());
+  assert.equal(
+    dashboard.upcomingEvents.some((item) => item.eventId === "100000000000000000000003"),
+    false,
+  );
+  assert.equal(dashboard.upcomingEvents[0].company, "Saved Company");
+  assert.equal(dashboard.upcomingEvents[0].role, "Saved Role");
+
+  const directAttentionFlags = computeAttentionFlags(applications, events, now);
+  const getFlagKey = (flag) =>
+    `${flag.referenceDate}|${flag.applicationId}|${flag.flagType}`;
+  assert.deepEqual(
+    dashboard.attentionFlags.map(getFlagKey),
+    [
+      `2026-07-01T08:00:00.000Z|${applicationIds.saved}|FOLLOW_UP_OVERDUE`,
+      `2026-07-01T08:00:00.000Z|${applicationIds.applied}|NO_RESPONSE_AFTER_APPLY`,
+      `2026-07-10T08:00:00.000Z|${applicationIds.inProcess}|FOLLOW_UP_OVERDUE`,
+      `2026-07-10T08:00:00.000Z|${applicationIds.inProcess}|NO_RESPONSE_AFTER_INTERVIEW`,
+    ],
+  );
+  assert.deepEqual(
+    [...dashboard.attentionFlags.map(getFlagKey)].sort(),
+    [...directAttentionFlags.map(getFlagKey)].sort(),
+  );
+  assert.ok(
+    dashboard.attentionFlags.every(
+      (flag) =>
+        flag.flagType !== "UPCOMING_EVENT" &&
+        typeof flag.applicationId === "string" &&
+        typeof flag.company === "string" &&
+        typeof flag.role === "string" &&
+        typeof flag.message === "string" &&
+        typeof flag.referenceDate === "string",
+    ),
+  );
+
+  assert.deepEqual(
+    buildDashboardSummary([...applications].reverse(), [...events].reverse(), now),
+    dashboard,
+  );
+  assert.equal(JSON.stringify(applications), applicationsSnapshot);
+  assert.equal(JSON.stringify(events), eventsSnapshot);
+
+  const emptyDashboard = buildDashboardSummary([], [], now);
+  assert.deepEqual(emptyDashboard, {
+    countsByStatus: {
+      saved: 0,
+      applied: 0,
+      in_process: 0,
+      offer: 0,
+      rejected: 0,
+      withdrawn: 0,
+    },
+    totalApplications: 0,
+    recentApplications: [],
+    upcomingEvents: [],
+    attentionFlags: [],
+  });
+}
+
 async function checkErrorMiddleware() {
   const { notFoundHandler } = await import("../src/middlewares/error.middleware.js");
   const domainResponse = await runMiddleware(
@@ -788,6 +1112,7 @@ checkObjectIdUtility();
 await checkApplicationListContract();
 await checkApplicationCrudContract();
 await checkEventCrudContract();
+checkDashboardContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
 checkProductionErrorMiddleware();
