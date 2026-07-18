@@ -8,9 +8,9 @@ V2-01 verified source-level implementation evidence and ran the safe local check
 
 Current implementation details that are not guaranteed V1 baseline behavior:
 
-- Dashboard status counts currently use `countsByStatus`; V2 examples use `statusCounts`. V2-12 owns the contract decision, and V2-13 must follow it.
-- Dashboard `recentApplications` currently exists, but it is V2 polish/current implementation detail to verify in V2-12/V2-13.
-- `followUpAt` sorting is not baseline behavior. It is only required if V2-04 implements it as an application-list contract improvement.
+- Dashboard status counts use `countsByStatus`, preserved by V2-12 and consumed by V2-13; `statusCounts` is not the active contract.
+- Dashboard `recentApplications` remains V2 polish/current implementation detail, verified with a limit of five by V2-12/V2-13.
+- `followUpAt` sorting is not baseline behavior; V2-04 owns it as an explicit application-list contract improvement.
 
 ## CI Checks
 
@@ -78,6 +78,12 @@ npm run dev
 ```
 
 ## Manual QA Evidence
+
+Use [frontend/docs/manual-frontend-testcases.md](../frontend/docs/manual-frontend-testcases.md) as
+the canonical detailed V2 browser-regression checklist. Create an execution copy or branch-specific
+record before changing testcase results; all canonical case results remain `NOT RUN`. Keep
+environment-dependent failure-injection and two-user cases separate from ordinary live-environment
+execution.
 
 Record:
 
