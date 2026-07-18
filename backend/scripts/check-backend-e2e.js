@@ -411,6 +411,7 @@ async function main() {
       body: {
         type: "note",
         title: "Secondary user event",
+        scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       },
     },
   );
@@ -773,17 +774,80 @@ async function main() {
   });
   assertStatus(cascadeEventResponse, 201, "create cascade event");
 
+  const secondaryDashboardResponse = await request("GET", "/dashboard/summary", {
+    token: secondUser.token,
+  });
+  assertStatus(secondaryDashboardResponse, 200, "secondary dashboard summary");
+  const secondaryDashboard = secondaryDashboardResponse.body?.dashboard;
+  assert(
+    secondaryDashboard?.totalApplications === 1,
+    "secondary dashboard should count only the secondary user's application",
+  );
+  assert(
+    secondaryDashboard?.recentApplications?.length === 1 &&
+      secondaryDashboard.recentApplications[0].applicationId === secondaryApplicationId,
+    "secondary dashboard recent applications should be user-scoped",
+  );
+  assert(
+    secondaryDashboard?.upcomingEvents?.some(
+      (item) => item.applicationId === secondaryApplicationId,
+    ),
+    "secondary dashboard should include its own upcoming event",
+  );
+  for (const sectionName of ["recentApplications", "upcomingEvents", "attentionFlags"]) {
+    assert(
+      secondaryDashboard?.[sectionName]?.every(
+        (item) => item.applicationId === secondaryApplicationId,
+      ),
+      `secondary dashboard ${sectionName} should exclude primary user data`,
+    );
+  }
+  console.log("PASS dashboard user scoping");
+
   const dashboardBeforeDeleteResponse = await request("GET", "/dashboard/summary", {
     token: primaryToken,
   });
   assertStatus(dashboardBeforeDeleteResponse, 200, "dashboard summary");
   const dashboardBeforeDelete = dashboardBeforeDeleteResponse.body?.dashboard;
-  const statusCounts = dashboardBeforeDelete?.statusCounts ?? dashboardBeforeDelete?.countsByStatus;
+  const statusCounts = dashboardBeforeDelete?.countsByStatus;
   assert(
     typeof dashboardBeforeDelete?.totalApplications === "number",
     "dashboard should include totalApplications",
   );
   assert(statusCounts && typeof statusCounts === "object", "dashboard should include status counts");
+  assert(
+    !Object.hasOwn(dashboardBeforeDelete, "statusCounts"),
+    "dashboard should preserve countsByStatus as the single status-count field",
+  );
+  assert(
+    ["saved", "applied", "in_process", "offer", "rejected", "withdrawn"].every(
+      (status) => typeof statusCounts[status] === "number",
+    ),
+    "dashboard should include every supported status count",
+  );
+  assert(
+    dashboardBeforeDelete.totalApplications ===
+      Object.values(statusCounts).reduce((total, count) => total + count, 0),
+    "dashboard totalApplications should equal the status-count total",
+  );
+  assert(
+    Array.isArray(dashboardBeforeDelete?.recentApplications),
+    "dashboard should include recentApplications",
+  );
+  assert(
+    dashboardBeforeDelete.recentApplications.every(
+      (item) => item.applicationId !== secondaryApplicationId,
+    ),
+    "primary dashboard recent applications should exclude secondary user data",
+  );
+  for (const sectionName of ["recentApplications", "upcomingEvents", "attentionFlags"]) {
+    assert(
+      dashboardBeforeDelete?.[sectionName]?.every(
+        (item) => item.applicationId !== secondaryApplicationId,
+      ),
+      `primary dashboard ${sectionName} should exclude secondary user data`,
+    );
+  }
   assert(
     Array.isArray(dashboardBeforeDelete?.upcomingEvents),
     "dashboard should include upcomingEvents",

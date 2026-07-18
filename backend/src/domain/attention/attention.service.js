@@ -20,6 +20,17 @@ function toIsoString(value) {
   return normalizeDate(value)?.toISOString() ?? null;
 }
 
+function compareIds(firstId, secondId) {
+  const firstValue = firstId?.toString?.() ?? "";
+  const secondValue = secondId?.toString?.() ?? "";
+
+  if (firstValue === secondValue) {
+    return 0;
+  }
+
+  return firstValue < secondValue ? -1 : 1;
+}
+
 export function computeAttentionFlags(applications, events, now = new Date()) {
   const groupedEvents = groupEventsByApplicationId(events ?? []);
 
@@ -62,6 +73,7 @@ export function computeUpcomingEvents(applications, events, now = new Date()) {
         type: event.type,
         title: event.title,
         scheduledAt: toIsoString(event.scheduledAt),
+        createdAt: toIsoString(event.createdAt),
       };
     })
     .filter(Boolean)
@@ -74,6 +86,15 @@ export function computeUpcomingEvents(applications, events, now = new Date()) {
         return dateDifference;
       }
 
-      return (firstEvent.eventId ?? "").localeCompare(secondEvent.eventId ?? "");
-    });
+      const createdAtDifference =
+        (normalizeDate(firstEvent.createdAt)?.getTime() ?? 0) -
+        (normalizeDate(secondEvent.createdAt)?.getTime() ?? 0);
+
+      if (createdAtDifference !== 0) {
+        return createdAtDifference;
+      }
+
+      return compareIds(firstEvent.eventId, secondEvent.eventId);
+    })
+    .map(({ createdAt, ...event }) => event);
 }

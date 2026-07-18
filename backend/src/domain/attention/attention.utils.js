@@ -59,7 +59,7 @@ export function isUpcomingWithinDays(date, days, now) {
 
   const timeUntilEvent = scheduledDate.getTime() - nowDate.getTime();
 
-  return timeUntilEvent >= 0 && timeUntilEvent <= days * MS_PER_DAY;
+  return timeUntilEvent >= 0 && timeUntilEvent < days * MS_PER_DAY;
 }
 
 export function groupEventsByApplicationId(events) {
