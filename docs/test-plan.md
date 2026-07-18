@@ -55,6 +55,12 @@ npm run check:e2e
 
 Use `APPLYFLOW_BACKEND_ORIGIN` if the backend is not running at the default origin.
 
+Run E2E only against a disposable MongoDB database, never a production or personal database. The
+script creates run-specific users, applications, and events, and deletes current-run applications
+and their events where the API permits. ApplyFlow has no user-delete endpoint, so successful
+disposable user registrations remain in the selected test database and may require database-level
+cleanup after the run.
+
 ## Local Frontend Checks
 
 Run this before opening a PR for frontend changes:
