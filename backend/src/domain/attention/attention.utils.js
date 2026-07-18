@@ -1,4 +1,9 @@
-import { getEventEffectiveDate, toDate } from "../timeline/timeline.utils.js";
+import {
+  compareTimelineEvents,
+  getEventEffectiveDate,
+  sortTimelineEvents,
+  toDate,
+} from "../timeline/timeline.utils.js";
 import {
   FOLLOW_UP_ELIGIBLE_STATUSES,
   SILENCE_ELIGIBLE_STATUSES,
@@ -76,20 +81,14 @@ export function groupEventsByApplicationId(events) {
 }
 
 export function getMostRecentEventByType(events, type) {
-  return events
-    .filter((event) => event.type === type && getAttentionEventDate(event))
-    .sort((firstEvent, secondEvent) => {
-      const firstDate = getAttentionEventDate(firstEvent);
-      const secondDate = getAttentionEventDate(secondEvent);
-
-      return secondDate.getTime() - firstDate.getTime();
-    })[0] ?? null;
+  return sortTimelineEvents(
+    events.filter((event) => event.type === type),
+    "desc",
+  )[0] ?? null;
 }
 
-export function hasLaterEventAfter(events, referenceDate, eventTypes) {
-  const normalizedReferenceDate = normalizeDate(referenceDate);
-
-  if (!normalizedReferenceDate) {
+export function hasLaterEventAfter(events, referenceEvent, eventTypes) {
+  if (!referenceEvent) {
     return false;
   }
 
@@ -98,9 +97,7 @@ export function hasLaterEventAfter(events, referenceDate, eventTypes) {
       return false;
     }
 
-    const eventDate = getAttentionEventDate(event);
-
-    return eventDate ? eventDate.getTime() > normalizedReferenceDate.getTime() : false;
+    return compareTimelineEvents(event, referenceEvent) > 0;
   });
 }
 
