@@ -1,5 +1,9 @@
 const DEFAULT_ORIGIN = "http://127.0.0.1:4000";
 const API_ORIGIN = (process.env.APPLYFLOW_BACKEND_ORIGIN || DEFAULT_ORIGIN).replace(/\/+$/, "");
+const RUN_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const RUN_MARKER = `ApplyFlow E2E ${RUN_ID}`;
+const LIST_SCOPE = `${RUN_MARKER} list`;
+const APPLICATION_STATUSES = ["saved", "applied", "in_process", "offer", "rejected", "withdrawn"];
 
 const createdApplications = [];
 let primaryToken = null;
@@ -13,8 +17,36 @@ function assert(condition, message) {
 function assertStatus(response, expectedStatus, label) {
   assert(
     response.status === expectedStatus,
-    `${label} expected HTTP ${expectedStatus}, got ${response.status}: ${JSON.stringify(response.body)}`,
+    `${label} (${response.request.method} ${response.request.path}) expected HTTP ${expectedStatus}, ` +
+      `got ${response.status}: ${formatResponseBody(response.body)}`,
   );
+}
+
+function redactSensitiveValues(value, key = "") {
+  if (/password|token|authorization|secret/i.test(key)) {
+    return "[REDACTED]";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveValues(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redactSensitiveValues(entryValue, entryKey),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function formatResponseBody(body) {
+  const formatted = JSON.stringify(redactSensitiveValues(body));
+
+  return formatted && formatted.length > 500 ? `${formatted.slice(0, 500)}...` : formatted;
 }
 
 function assertControlledError(response, label) {
@@ -40,10 +72,12 @@ function assertValidationError(response, fieldName, label) {
   );
 }
 
-async function request(method, path, { token, body } = {}) {
+async function request(method, path, { token, authorization, body } = {}) {
   const headers = {};
 
-  if (token) {
+  if (authorization !== undefined) {
+    headers.Authorization = authorization;
+  } else if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
 
@@ -79,14 +113,14 @@ async function request(method, path, { token, body } = {}) {
   return {
     status: response.status,
     body: responseBody,
+    request: { method, path },
   };
 }
 
 async function createTestUser(label) {
-  const uniqueId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const user = {
-    displayName: `ApplyFlow E2E ${label}`,
-    email: `applyflow-e2e-${label}-${uniqueId}@example.test`,
+    displayName: `${RUN_MARKER} ${label}`,
+    email: `applyflow-e2e-${label}-${RUN_ID}@example.test`,
     password: "ApplyFlowE2E123!",
   };
 
@@ -112,16 +146,20 @@ async function createTestUser(label) {
 
 async function cleanupApplication(token, applicationId) {
   if (!token || !applicationId) {
-    return;
+    return null;
   }
 
-  const response = await request("DELETE", `/applications/${applicationId}`, { token });
+  try {
+    const response = await request("DELETE", `/applications/${applicationId}`, { token });
 
-  if (![200, 404].includes(response.status)) {
-    console.warn(
-      `WARN cleanup failed for application ${applicationId}: ${response.status} ${JSON.stringify(response.body)}`,
-    );
+    if (![200, 404].includes(response.status)) {
+      return `application ${applicationId}: HTTP ${response.status} ${formatResponseBody(response.body)}`;
+    }
+  } catch (error) {
+    return `application ${applicationId}: ${error.message}`;
   }
+
+  return null;
 }
 
 function forgetCreatedApplication(applicationId) {
@@ -133,15 +171,53 @@ function forgetCreatedApplication(applicationId) {
 
 function applicationPayload(overrides = {}) {
   return {
-    company: "ApplyFlow E2E Company",
-    role: "Backend Test Engineer",
+    company: `${RUN_MARKER} Company`,
+    role: `${RUN_MARKER} Backend Test Engineer`,
     currentStatus: "applied",
     jdUrl: "https://example.test/applyflow-e2e",
     source: "E2E script",
-    notes: "Created by backend/scripts/check-backend-e2e.js",
+    notes: `${RUN_MARKER}; created by backend/scripts/check-backend-e2e.js`,
     followUpAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
     ...overrides,
   };
+}
+
+function compareApplicationField(first, second, fieldName, direction) {
+  const firstTime = new Date(first[fieldName]).getTime();
+  const secondTime = new Date(second[fieldName]).getTime();
+  const dateDifference = firstTime - secondTime;
+
+  if (dateDifference !== 0) {
+    return direction * dateDifference;
+  }
+
+  return direction * first._id.localeCompare(second._id);
+}
+
+function assertApplicationOrder(actual, reference, fieldName, sortOrder, label) {
+  const direction = sortOrder === "asc" ? 1 : -1;
+  const expectedIds = [...reference]
+    .sort((first, second) => compareApplicationField(first, second, fieldName, direction))
+    .map((application) => application._id);
+  const actualIds = actual.map((application) => application._id);
+
+  assert(
+    actualIds.length === expectedIds.length &&
+      actualIds.every((applicationId, index) => applicationId === expectedIds[index]),
+    `${label} should order ${fieldName} ${sortOrder}; expected ${expectedIds.join(", ")}, ` +
+      `got ${actualIds.join(", ")}`,
+  );
+}
+
+function assertExactKeys(value, expectedKeys, label) {
+  const actualKeys = Object.keys(value ?? {}).sort();
+  const sortedExpectedKeys = [...expectedKeys].sort();
+
+  assert(
+    actualKeys.length === sortedExpectedKeys.length &&
+      actualKeys.every((key, index) => key === sortedExpectedKeys[index]),
+    `${label} should have keys ${sortedExpectedKeys.join(", ")}; got ${actualKeys.join(", ")}`,
+  );
 }
 
 async function main() {
@@ -150,15 +226,35 @@ async function main() {
   const healthResponse = await request("GET", "/health");
   assertStatus(healthResponse, 200, "health check");
   assert(healthResponse.body?.success === true, "health check should report success");
+  assert(
+    typeof healthResponse.body?.message === "string" && healthResponse.body.message.length > 0,
+    "health check should return a readable message",
+  );
   console.log("PASS health check");
 
   const primaryUser = await createTestUser("primary");
   primaryToken = primaryUser.token;
 
+  const missingTokenResponse = await request("GET", "/auth/me");
+  assertStatus(missingTokenResponse, 401, "auth me without token");
+  assertControlledError(missingTokenResponse, "auth me without token");
+
+  const malformedAuthorizationResponse = await request("GET", "/auth/me", {
+    authorization: "Basic invalid-credentials",
+  });
+  assertStatus(malformedAuthorizationResponse, 401, "auth me with malformed authorization");
+  assertControlledError(malformedAuthorizationResponse, "auth me with malformed authorization");
+
+  const invalidTokenResponse = await request("GET", "/auth/me", {
+    token: "not-a-valid-jwt",
+  });
+  assertStatus(invalidTokenResponse, 401, "auth me with invalid token");
+  assertControlledError(invalidTokenResponse, "auth me with invalid token");
+
   const meResponse = await request("GET", "/auth/me", { token: primaryToken });
   assertStatus(meResponse, 200, "auth me");
   assert(meResponse.body?.user?.email === primaryUser.email, "auth me should return current user");
-  console.log("PASS auth register/login/me");
+  console.log("PASS auth register/login/me and authorization errors");
 
   const badLoginResponse = await request("POST", "/auth/login", {
     body: {
@@ -166,7 +262,7 @@ async function main() {
       password: "wrong-password",
     },
   });
-  assert([400, 401].includes(badLoginResponse.status), "bad login should fail with 400 or 401");
+  assertStatus(badLoginResponse, 401, "bad login");
   assertControlledError(badLoginResponse, "bad login");
 
   const invalidApplicationResponse = await request("POST", "/applications", {
@@ -241,6 +337,11 @@ async function main() {
     token: primaryToken,
   });
   assertStatus(ownerDetailAfterCrossUserDelete, 200, "owner detail after cross-user delete");
+  assert(
+    ownerDetailAfterCrossUserDelete.body?.application?.company === application.company &&
+      ownerDetailAfterCrossUserDelete.body?.application?.role === application.role,
+    "cross-user update/delete attempts must not mutate the owner's application",
+  );
 
   const nonexistentDetailResponse = await request(
     "GET",
@@ -271,37 +372,13 @@ async function main() {
 
   const listResponse = await request("GET", "/applications", { token: primaryToken });
   assertStatus(listResponse, 200, "list applications");
+  assert(listResponse.body?.success === true, "list applications should report success");
+  assert(Array.isArray(listResponse.body?.applications), "list applications should return an array");
   assert(
     listResponse.body?.applications?.some((item) => item._id === applicationId),
     "list applications should include created application",
   );
-
-  const searchResponse = await request("GET", "/applications?search=ApplyFlow%20E2E", {
-    token: primaryToken,
-  });
-  assertStatus(searchResponse, 200, "search applications");
-  assert(
-    searchResponse.body?.applications?.some((item) => item._id === applicationId),
-    "search should find created application",
-  );
-
-  const filterResponse = await request("GET", "/applications?status=applied", {
-    token: primaryToken,
-  });
-  assertStatus(filterResponse, 200, "filter applications");
-  assert(
-    filterResponse.body?.applications?.every((item) => item.currentStatus === "applied"),
-    "status filter should only return applied applications",
-  );
-
-  const sortResponse = await request(
-    "GET",
-    "/applications?sortBy=updatedAt&sortOrder=desc",
-    { token: primaryToken },
-  );
-  assertStatus(sortResponse, 200, "sort applications");
-  assert(Array.isArray(sortResponse.body?.applications), "sort response should include applications");
-  console.log("PASS application create/list/search/filter/sort");
+  console.log("PASS application create and list response shape");
 
   const detailResponse = await request("GET", `/applications/${applicationId}`, {
     token: primaryToken,
@@ -343,8 +420,8 @@ async function main() {
   const updateResponse = await request("PATCH", `/applications/${applicationId}`, {
     token: primaryToken,
     body: {
-      company: "  ApplyFlow E2E Company Updated  ",
-      role: "  Backend Contract Engineer  ",
+      company: `  ${LIST_SCOPE} Company Updated  `,
+      role: `  ${LIST_SCOPE} Backend Contract Engineer  `,
       currentStatus: "in_process",
       jdUrl: null,
       source: null,
@@ -354,11 +431,11 @@ async function main() {
   });
   assertStatus(updateResponse, 200, "application update");
   assert(
-    updateResponse.body?.application?.company === "ApplyFlow E2E Company Updated",
+    updateResponse.body?.application?.company === `${LIST_SCOPE} Company Updated`,
     "application update should trim company",
   );
   assert(
-    updateResponse.body?.application?.role === "Backend Contract Engineer",
+    updateResponse.body?.application?.role === `${LIST_SCOPE} Backend Contract Engineer`,
     "application update should trim role",
   );
   assert(
@@ -373,11 +450,158 @@ async function main() {
   }
   console.log("PASS application detail/update validation and null clearing");
 
+  const listFixtureDateBase = Date.now() + 3 * 24 * 60 * 60 * 1000;
+  const sharedFollowUpAt = new Date(listFixtureDateBase).toISOString();
+  const listFixturePayloads = [
+    {
+      company: `${LIST_SCOPE} [A+B](QA)?`,
+      role: `${LIST_SCOPE} Platform Engineer`,
+      currentStatus: "saved",
+      followUpAt: sharedFollowUpAt,
+    },
+    {
+      company: `${LIST_SCOPE} Search Company`,
+      role: `${LIST_SCOPE} Rare Role ${RUN_ID}`,
+      currentStatus: "offer",
+      followUpAt: sharedFollowUpAt,
+    },
+    {
+      company: `${LIST_SCOPE} Applied Company`,
+      role: `${LIST_SCOPE} Applied Engineer`,
+      currentStatus: "applied",
+      followUpAt: new Date(listFixtureDateBase + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      company: `${LIST_SCOPE} Rejected Company`,
+      role: `${LIST_SCOPE} Rejected Engineer`,
+      currentStatus: "rejected",
+      followUpAt: new Date(listFixtureDateBase + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      company: `${LIST_SCOPE} Withdrawn Company`,
+      role: `${LIST_SCOPE} Withdrawn Engineer`,
+      currentStatus: "withdrawn",
+      followUpAt: new Date(listFixtureDateBase + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  ];
+  const listFixtureIds = [];
+
+  for (const fixture of listFixturePayloads) {
+    const response = await request("POST", "/applications", {
+      token: primaryToken,
+      body: applicationPayload(fixture),
+    });
+    assertStatus(response, 201, `create list fixture ${fixture.currentStatus}`);
+    const fixtureId = response.body?.application?._id;
+    assert(fixtureId, "list fixture should return an application id");
+    listFixtureIds.push(fixtureId);
+    createdApplications.push({ token: primaryToken, applicationId: fixtureId });
+  }
+
+  const restoreFollowUpResponse = await request("PATCH", `/applications/${applicationId}`, {
+    token: primaryToken,
+    body: {
+      followUpAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  });
+  assertStatus(restoreFollowUpResponse, 200, "restore follow-up for list sorting");
+
+  const encodedListScope = encodeURIComponent(LIST_SCOPE);
+  const scopedListResponse = await request("GET", `/applications?search=${encodedListScope}`, {
+    token: primaryToken,
+  });
+  assertStatus(scopedListResponse, 200, "run-scoped application list");
+  const scopedApplications = scopedListResponse.body?.applications;
+  assert(
+    Array.isArray(scopedApplications) && scopedApplications.length === 6,
+    "run-scoped list should contain exactly six primary fixtures",
+  );
+
+  const companySearchResponse = await request(
+    "GET",
+    `/applications?search=${encodeURIComponent("[A+B](QA)?")}`,
+    { token: primaryToken },
+  );
+  assertStatus(companySearchResponse, 200, "literal regex-character company search");
+  assert(
+    companySearchResponse.body?.applications?.length === 1 &&
+      companySearchResponse.body.applications[0]._id === listFixtureIds[0],
+    "company search should treat regex characters literally",
+  );
+
+  const roleSearchResponse = await request(
+    "GET",
+    `/applications?search=${encodeURIComponent(`  Rare Role ${RUN_ID}  `)}`,
+    { token: primaryToken },
+  );
+  assertStatus(roleSearchResponse, 200, "trimmed role search");
+  assert(
+    roleSearchResponse.body?.applications?.length === 1 &&
+      roleSearchResponse.body.applications[0]._id === listFixtureIds[1],
+    "role search should trim surrounding whitespace and match role text",
+  );
+
+  const filterResponse = await request(
+    "GET",
+    `/applications?search=${encodedListScope}&status=saved`,
+    { token: primaryToken },
+  );
+  assertStatus(filterResponse, 200, "status-filtered run-scoped list");
+  assert(
+    filterResponse.body?.applications?.length === 1 &&
+      filterResponse.body.applications[0]._id === listFixtureIds[0],
+    "status filter should combine with search and return only saved applications",
+  );
+
+  const invalidListQueries = [
+    { path: "/applications?status=invalid_status", fieldName: "status", label: "invalid list status" },
+    { path: "/applications?sortBy=company", fieldName: "sortBy", label: "invalid list sort field" },
+    { path: "/applications?sortOrder=sideways", fieldName: "sortOrder", label: "invalid list sort order" },
+    { path: "/applications?unexpected=true", fieldName: "query", label: "unknown list query" },
+  ];
+
+  for (const { path, fieldName, label } of invalidListQueries) {
+    const response = await request("GET", path, { token: primaryToken });
+    assertStatus(response, 400, label);
+    assertValidationError(response, fieldName, label);
+  }
+
+  const defaultSortResponse = await request("GET", `/applications?search=${encodedListScope}`, {
+    token: primaryToken,
+  });
+  assertStatus(defaultSortResponse, 200, "default application sort");
+  assertApplicationOrder(
+    defaultSortResponse.body.applications,
+    scopedApplications,
+    "updatedAt",
+    "desc",
+    "default application sort",
+  );
+
+  for (const sortBy of ["createdAt", "updatedAt", "followUpAt"]) {
+    for (const sortOrder of ["asc", "desc"]) {
+      const response = await request(
+        "GET",
+        `/applications?search=${encodedListScope}&sortBy=${sortBy}&sortOrder=${sortOrder}`,
+        { token: primaryToken },
+      );
+      assertStatus(response, 200, `${sortBy} ${sortOrder} sort`);
+      assertApplicationOrder(
+        response.body.applications,
+        scopedApplications,
+        sortBy,
+        sortOrder,
+        `${sortBy} ${sortOrder} sort`,
+      );
+    }
+  }
+  console.log("PASS application search/filter/default sort/supported sorts/query validation");
+
   const secondaryApplicationResponse = await request("POST", "/applications", {
     token: secondUser.token,
     body: applicationPayload({
-      company: "Secondary User Company",
-      role: "Secondary User Role",
+      company: `${RUN_MARKER} Secondary User Company`,
+      role: `${RUN_MARKER} Secondary User Role`,
     }),
   });
   assertStatus(secondaryApplicationResponse, 201, "create secondary application");
@@ -388,11 +612,37 @@ async function main() {
     applicationId: secondaryApplicationId,
   });
 
+  const primaryScopedListResponse = await request(
+    "GET",
+    `/applications?search=${encodeURIComponent(RUN_ID)}`,
+    { token: primaryToken },
+  );
+  assertStatus(primaryScopedListResponse, 200, "primary user-scoped application list");
+  assert(
+    primaryScopedListResponse.body?.applications?.length === 6 &&
+      primaryScopedListResponse.body.applications.every(
+        (item) => item._id !== secondaryApplicationId,
+      ),
+    "primary application list must include its six fixtures and exclude the secondary user's data",
+  );
+
+  const secondaryScopedListResponse = await request(
+    "GET",
+    `/applications?search=${encodeURIComponent(RUN_ID)}`,
+    { token: secondUser.token },
+  );
+  assertStatus(secondaryScopedListResponse, 200, "secondary user-scoped application list");
+  assert(
+    secondaryScopedListResponse.body?.applications?.length === 1 &&
+      secondaryScopedListResponse.body.applications[0]._id === secondaryApplicationId,
+    "secondary application list must include only its own run fixture",
+  );
+
   const wrongParentApplicationResponse = await request("POST", "/applications", {
     token: primaryToken,
     body: applicationPayload({
-      company: "Wrong Parent Company",
-      role: "Wrong Parent Role",
+      company: `${RUN_MARKER} Wrong Parent Company`,
+      role: `${RUN_MARKER} Wrong Parent Role`,
     }),
   });
   assertStatus(wrongParentApplicationResponse, 201, "create wrong-parent application");
@@ -410,7 +660,7 @@ async function main() {
       token: secondUser.token,
       body: {
         type: "note",
-        title: "Secondary user event",
+        title: `${RUN_MARKER} Secondary user event`,
         scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       },
     },
@@ -505,16 +755,47 @@ async function main() {
     token: primaryToken,
     body: {
       type: "interview",
-      title: "Technical Interview",
+      title: `${RUN_MARKER} Technical Interview`,
       scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       mode: "online",
       meetingLink: "https://meet.example.test/applyflow-e2e",
-      note: "Created by E2E script",
+      note: `${RUN_MARKER} event note`,
     },
   });
   assertStatus(createEventResponse, 201, "create event");
   const event = createEventResponse.body?.event;
   assert(event?._id, "create event should return an event id");
+
+  const secondaryToPrimaryEventRequests = [
+    {
+      method: "POST",
+      path: `/applications/${applicationId}/events`,
+      body: { type: "note", title: `${RUN_MARKER} forbidden create` },
+      label: "secondary-to-primary event create",
+    },
+    {
+      method: "GET",
+      path: `/applications/${applicationId}/events`,
+      label: "secondary-to-primary event list",
+    },
+    {
+      method: "PATCH",
+      path: `/applications/${applicationId}/events/${event._id}`,
+      body: { title: `${RUN_MARKER} forbidden update` },
+      label: "secondary-to-primary event update",
+    },
+    {
+      method: "DELETE",
+      path: `/applications/${applicationId}/events/${event._id}`,
+      label: "secondary-to-primary event delete",
+    },
+  ];
+
+  for (const { method, path, body, label } of secondaryToPrimaryEventRequests) {
+    const response = await request(method, path, { token: secondUser.token, body });
+    assertStatus(response, 404, label);
+    assertControlledError(response, label);
+  }
 
   const malformedEventUpdateIdResponse = await request(
     "PATCH",
@@ -573,6 +854,19 @@ async function main() {
     { token: primaryToken },
   );
   assertStatus(wrongParentDeleteResponse, 404, "wrong-parent event delete");
+
+  const ownerEventsAfterWrongParentRequests = await request(
+    "GET",
+    `/applications/${applicationId}/events`,
+    { token: primaryToken },
+  );
+  assertStatus(ownerEventsAfterWrongParentRequests, 200, "owner events after wrong-parent requests");
+  assert(
+    ownerEventsAfterWrongParentRequests.body?.events?.some(
+      (item) => item._id === event._id && item.title === event.title,
+    ),
+    "wrong-parent update/delete attempts must not mutate or delete the original event",
+  );
 
   const crossUserUpdateEventResponse = await request(
     "PATCH",
@@ -644,7 +938,7 @@ async function main() {
       token: primaryToken,
       body: {
         type: "note",
-        title: "  Updated Technical Interview  ",
+        title: `  ${RUN_MARKER} Updated Technical Interview  `,
         occurredAt: null,
         scheduledAt: null,
         mode: null,
@@ -659,7 +953,7 @@ async function main() {
   );
   assertStatus(updateEventResponse, 200, "update event");
   assert(
-    updateEventResponse.body?.event?.title === "Updated Technical Interview",
+    updateEventResponse.body?.event?.title === `${RUN_MARKER} Updated Technical Interview`,
     "event update should trim and persist title",
   );
   assert(updateEventResponse.body?.event?.type === "note", "event update should persist type");
@@ -684,21 +978,21 @@ async function main() {
   const timelinePayloads = [
     {
       type: "note",
-      title: "Timeline created fallback",
+      title: `${RUN_MARKER} Timeline created fallback`,
     },
     {
       type: "note",
-      title: "Timeline occurred first",
+      title: `${RUN_MARKER} Timeline occurred first`,
       occurredAt: new Date(timelineBase).toISOString(),
     },
     {
       type: "note",
-      title: "Timeline scheduled second",
+      title: `${RUN_MARKER} Timeline scheduled second`,
       scheduledAt: new Date(timelineBase + 60 * 60 * 1000).toISOString(),
     },
     {
       type: "note",
-      title: "Timeline occurred wins",
+      title: `${RUN_MARKER} Timeline occurred wins`,
       occurredAt: new Date(timelineBase + 2 * 60 * 60 * 1000).toISOString(),
       scheduledAt: new Date(timelineBase - 30 * 60 * 1000).toISOString(),
     },
@@ -754,6 +1048,31 @@ async function main() {
     { token: primaryToken },
   );
   assertStatus(deleteEventResponse, 200, "delete event");
+
+  const deletedEventUpdateResponse = await request(
+    "PATCH",
+    `/applications/${applicationId}/events/${event._id}`,
+    { token: primaryToken, body: { title: `${RUN_MARKER} deleted event update` } },
+  );
+  assertStatus(deletedEventUpdateResponse, 404, "update deleted event");
+
+  const deletedEventDeleteResponse = await request(
+    "DELETE",
+    `/applications/${applicationId}/events/${event._id}`,
+    { token: primaryToken },
+  );
+  assertStatus(deletedEventDeleteResponse, 404, "delete already-deleted event");
+
+  const eventsAfterEventDeleteResponse = await request(
+    "GET",
+    `/applications/${applicationId}/events`,
+    { token: primaryToken },
+  );
+  assertStatus(eventsAfterEventDeleteResponse, 200, "events after event delete");
+  assert(
+    eventsAfterEventDeleteResponse.body?.events?.every((item) => item._id !== event._id),
+    "deleted event must no longer appear in the parent timeline",
+  );
   console.log("PASS event ownership, update validation, null clearing, CRUD, and timeline order");
 
   const deleteWrongParentApplicationResponse = await request(
@@ -768,7 +1087,7 @@ async function main() {
     token: primaryToken,
     body: {
       type: "follow_up",
-      title: "Cascade check follow-up",
+      title: `${RUN_MARKER} Cascade check follow-up`,
       scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     },
   });
@@ -779,6 +1098,7 @@ async function main() {
   });
   assertStatus(secondaryDashboardResponse, 200, "secondary dashboard summary");
   const secondaryDashboard = secondaryDashboardResponse.body?.dashboard;
+  assert(secondaryDashboardResponse.body?.success === true, "secondary dashboard should report success");
   assert(
     secondaryDashboard?.totalApplications === 1,
     "secondary dashboard should count only the secondary user's application",
@@ -794,6 +1114,18 @@ async function main() {
     ),
     "secondary dashboard should include its own upcoming event",
   );
+  assertExactKeys(
+    secondaryDashboard?.countsByStatus,
+    APPLICATION_STATUSES,
+    "secondary dashboard countsByStatus",
+  );
+  assert(
+    secondaryDashboard.countsByStatus.applied === 1 &&
+      APPLICATION_STATUSES.filter((status) => status !== "applied").every(
+        (status) => secondaryDashboard.countsByStatus[status] === 0,
+      ),
+    "secondary dashboard should report exact user-scoped status counts",
+  );
   for (const sectionName of ["recentApplications", "upcomingEvents", "attentionFlags"]) {
     assert(
       secondaryDashboard?.[sectionName]?.every(
@@ -808,6 +1140,7 @@ async function main() {
     token: primaryToken,
   });
   assertStatus(dashboardBeforeDeleteResponse, 200, "dashboard summary");
+  assert(dashboardBeforeDeleteResponse.body?.success === true, "dashboard should report success");
   const dashboardBeforeDelete = dashboardBeforeDeleteResponse.body?.dashboard;
   const statusCounts = dashboardBeforeDelete?.countsByStatus;
   assert(
@@ -815,14 +1148,13 @@ async function main() {
     "dashboard should include totalApplications",
   );
   assert(statusCounts && typeof statusCounts === "object", "dashboard should include status counts");
+  assertExactKeys(statusCounts, APPLICATION_STATUSES, "primary dashboard countsByStatus");
   assert(
     !Object.hasOwn(dashboardBeforeDelete, "statusCounts"),
     "dashboard should preserve countsByStatus as the single status-count field",
   );
   assert(
-    ["saved", "applied", "in_process", "offer", "rejected", "withdrawn"].every(
-      (status) => typeof statusCounts[status] === "number",
-    ),
+    APPLICATION_STATUSES.every((status) => typeof statusCounts[status] === "number"),
     "dashboard should include every supported status count",
   );
   assert(
@@ -834,6 +1166,17 @@ async function main() {
     Array.isArray(dashboardBeforeDelete?.recentApplications),
     "dashboard should include recentApplications",
   );
+  assert(
+    dashboardBeforeDelete.recentApplications.length === 5,
+    "dashboard recentApplications should truncate six applications to the limit of five",
+  );
+  for (const recentApplication of dashboardBeforeDelete.recentApplications) {
+    assertExactKeys(
+      recentApplication,
+      ["applicationId", "company", "role", "currentStatus", "updatedAt", "followUpAt"],
+      "dashboard recent application",
+    );
+  }
   assert(
     dashboardBeforeDelete.recentApplications.every(
       (item) => item.applicationId !== secondaryApplicationId,
@@ -857,8 +1200,9 @@ async function main() {
     "dashboard should include attentionFlags",
   );
   assert(
-    dashboardBeforeDelete.totalApplications >= 1,
-    "dashboard should include created application before delete",
+    dashboardBeforeDelete.totalApplications === 6 &&
+      APPLICATION_STATUSES.every((status) => statusCounts[status] === 1),
+    "dashboard should report one application in each status for six primary run fixtures",
   );
   console.log("PASS dashboard summary shape");
 
@@ -878,6 +1222,14 @@ async function main() {
   });
   assertStatus(deletedEventsResponse, 404, "deleted application events");
 
+  for (const listFixtureId of listFixtureIds) {
+    const response = await request("DELETE", `/applications/${listFixtureId}`, {
+      token: primaryToken,
+    });
+    assertStatus(response, 200, `delete list fixture ${listFixtureId}`);
+    forgetCreatedApplication(listFixtureId);
+  }
+
   const dashboardAfterDeleteResponse = await request("GET", "/dashboard/summary", {
     token: primaryToken,
   });
@@ -885,7 +1237,16 @@ async function main() {
   const dashboardAfterDelete = dashboardAfterDeleteResponse.body?.dashboard;
   assert(
     dashboardAfterDelete.totalApplications === 0,
-    "dashboard should not include deleted application",
+    "empty dashboard should report zero applications",
+  );
+  assertExactKeys(
+    dashboardAfterDelete.countsByStatus,
+    APPLICATION_STATUSES,
+    "empty dashboard countsByStatus",
+  );
+  assert(
+    APPLICATION_STATUSES.every((status) => dashboardAfterDelete.countsByStatus[status] === 0),
+    "empty dashboard should report zero for every status",
   );
   assert(
     dashboardAfterDelete.upcomingEvents.every((item) => item.applicationId !== applicationId),
@@ -895,6 +1256,13 @@ async function main() {
     dashboardAfterDelete.attentionFlags.every((item) => item.applicationId !== applicationId),
     "dashboard should not include flags for deleted application",
   );
+  for (const sectionName of ["recentApplications", "upcomingEvents", "attentionFlags"]) {
+    assert(
+      Array.isArray(dashboardAfterDelete[sectionName]) &&
+        dashboardAfterDelete[sectionName].length === 0,
+      `empty dashboard ${sectionName} should be an empty array`,
+    );
+  }
 
   const secondaryEventsAfterDelete = await request(
     "GET",
@@ -909,14 +1277,36 @@ async function main() {
   console.log("PASS user-scoped delete cascade");
 }
 
+let mainError = null;
+
 try {
   await main();
-  console.log("PASS ApplyFlow backend E2E checks completed");
 } catch (error) {
+  mainError = error;
   console.error(`FAIL ${error.message}`);
-  process.exitCode = 1;
 } finally {
+  const cleanupFailures = [];
+
   for (const { token, applicationId } of [...createdApplications].reverse()) {
-    await cleanupApplication(token, applicationId);
+    const cleanupFailure = await cleanupApplication(token, applicationId);
+
+    if (cleanupFailure) {
+      cleanupFailures.push(cleanupFailure);
+    }
+  }
+
+  for (const cleanupFailure of cleanupFailures) {
+    console.error(`FAIL cleanup ${cleanupFailure}`);
+  }
+
+  console.log(
+    "INFO successful disposable user registrations remain in the configured test database " +
+      "because ApplyFlow has no user-delete endpoint.",
+  );
+
+  if (mainError || cleanupFailures.length > 0) {
+    process.exitCode = 1;
+  } else {
+    console.log("PASS ApplyFlow backend E2E checks completed");
   }
 }
