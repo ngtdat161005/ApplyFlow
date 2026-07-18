@@ -20,7 +20,14 @@ function compareDates(firstDate, secondDate) {
 }
 
 function compareObjectIds(firstId, secondId) {
-  return firstId?.toString?.().localeCompare(secondId?.toString?.() ?? "") ?? 0;
+  const firstValue = firstId?.toString?.() ?? "";
+  const secondValue = secondId?.toString?.() ?? "";
+
+  if (firstValue === secondValue) {
+    return 0;
+  }
+
+  return firstValue < secondValue ? -1 : 1;
 }
 
 export function getEventEffectiveDate(event, options = {}) {

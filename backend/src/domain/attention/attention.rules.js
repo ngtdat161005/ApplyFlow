@@ -50,7 +50,7 @@ export function evaluateNoResponseAfterApply(application, events, now) {
     return null;
   }
 
-  if (hasLaterEventAfter(events, referenceDate, APPLY_PROGRESS_EVENT_TYPES)) {
+  if (hasLaterEventAfter(events, appliedEvent, APPLY_PROGRESS_EVENT_TYPES)) {
     return null;
   }
 
@@ -85,7 +85,7 @@ export function evaluateNoResponseAfterInterview(application, events, now) {
     return null;
   }
 
-  if (hasLaterEventAfter(events, referenceDate, INTERVIEW_RESPONSE_EVENT_TYPES)) {
+  if (hasLaterEventAfter(events, interviewEvent, INTERVIEW_RESPONSE_EVENT_TYPES)) {
     return null;
   }
 

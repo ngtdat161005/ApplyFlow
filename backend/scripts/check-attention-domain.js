@@ -4,6 +4,7 @@ import {
   computeAttentionFlags,
   computeUpcomingEvents,
 } from "../src/domain/attention/attention.service.js";
+import { sortTimelineEvents } from "../src/domain/timeline/timeline.utils.js";
 
 const now = new Date("2026-07-05T00:00:00.000Z");
 
@@ -58,8 +59,21 @@ assertHasType(
   applyFlagType,
 );
 
+assertHasType(
+  typesFor(
+    [application({ currentStatus: "in_process" })],
+    [event({ occurredAt: daysAgo(16) })],
+  ),
+  applyFlagType,
+);
+
 assertMissingType(
-  typesFor([application()], [event({ occurredAt: daysAgo(10) })]),
+  typesFor([application()], [event({ occurredAt: daysAgo(13) })]),
+  applyFlagType,
+);
+
+assertHasType(
+  typesFor([application()], [event({ occurredAt: daysAgo(14) })]),
   applyFlagType,
 );
 
@@ -74,7 +88,102 @@ assertMissingType(
   applyFlagType,
 );
 
-for (const currentStatus of ["rejected", "withdrawn"]) {
+assertHasType(
+  typesFor(
+    [application()],
+    [
+      event({ occurredAt: daysAgo(16), createdAt: daysAgo(16) }),
+      event({
+        _id: "event_earlier_progress",
+        type: "hr_call",
+        occurredAt: daysAgo(20),
+        createdAt: daysAgo(1),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+assertHasType(
+  typesFor(
+    [application()],
+    [
+      event({ _id: "event_reference", occurredAt: daysAgo(16), createdAt: daysAgo(15) }),
+      event({
+        _id: "event_progress",
+        type: "hr_call",
+        occurredAt: daysAgo(16),
+        createdAt: daysAgo(20),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+assertMissingType(
+  typesFor(
+    [application()],
+    [
+      event({ occurredAt: daysAgo(16), createdAt: daysAgo(16) }),
+      event({
+        _id: "event_created_progress",
+        type: "hr_call",
+        createdAt: daysAgo(5),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+assertMissingType(
+  typesFor(
+    [application()],
+    [
+      event({ _id: "event_reference", occurredAt: daysAgo(16), createdAt: daysAgo(20) }),
+      event({
+        _id: "event_progress",
+        type: "hr_call",
+        occurredAt: daysAgo(16),
+        createdAt: daysAgo(15),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+assertMissingType(
+  typesFor(
+    [application()],
+    [
+      event({ _id: "event_a", occurredAt: daysAgo(16), createdAt: daysAgo(20) }),
+      event({
+        _id: "event_b",
+        type: "hr_call",
+        occurredAt: daysAgo(16),
+        createdAt: daysAgo(20),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+assertHasType(
+  typesFor(
+    [application()],
+    [
+      event({ _id: "event_b", occurredAt: daysAgo(16), createdAt: daysAgo(20) }),
+      event({
+        _id: "event_a",
+        type: "hr_call",
+        occurredAt: daysAgo(16),
+        createdAt: daysAgo(20),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
+for (const currentStatus of ["saved", "offer", "rejected", "withdrawn"]) {
   assertMissingType(
     typesFor([application({ currentStatus })], [event({ occurredAt: daysAgo(16) })]),
     applyFlagType,
@@ -92,6 +201,22 @@ assertMissingType(
   applyFlagType,
 );
 
+assertMissingType(
+  typesFor(
+    [application()],
+    [
+      event({ _id: "event_dated", occurredAt: daysAgo(16), createdAt: daysAgo(16) }),
+      event({
+        _id: "event_created_only",
+        occurredAt: undefined,
+        scheduledAt: undefined,
+        createdAt: daysAgo(1),
+      }),
+    ],
+  ),
+  applyFlagType,
+);
+
 assertHasType(
   typesFor(
     [application({ currentStatus: "in_process" })],
@@ -100,12 +225,28 @@ assertHasType(
   interviewFlagType,
 );
 
-assertMissingType(
-  typesFor([application()], [event({ type: "interview", occurredAt: daysAgo(5) })]),
+assertHasType(
+  typesFor(
+    [application({ currentStatus: "applied" })],
+    [event({ type: "interview", occurredAt: daysAgo(8) })],
+  ),
   interviewFlagType,
 );
 
-for (const laterType of ["offer", "rejected", "follow_up"]) {
+assertMissingType(
+  typesFor([application()], [event({ type: "interview", occurredAt: daysAgo(6) })]),
+  interviewFlagType,
+);
+
+assertHasType(
+  typesFor(
+    [application({ currentStatus: "in_process" })],
+    [event({ type: "interview", occurredAt: daysAgo(7) })],
+  ),
+  interviewFlagType,
+);
+
+for (const laterType of ["offer", "rejected", "follow_up", "interview"]) {
   assertMissingType(
     typesFor(
       [application({ currentStatus: "in_process" })],
@@ -118,7 +259,7 @@ for (const laterType of ["offer", "rejected", "follow_up"]) {
   );
 }
 
-for (const currentStatus of ["offer", "rejected", "withdrawn"]) {
+for (const currentStatus of ["saved", "offer", "rejected", "withdrawn"]) {
   assertMissingType(
     typesFor(
       [application({ currentStatus })],
@@ -128,7 +269,7 @@ for (const currentStatus of ["offer", "rejected", "withdrawn"]) {
   );
 }
 
-for (const currentStatus of ["saved", "applied"]) {
+for (const currentStatus of ["saved", "applied", "in_process"]) {
   assertHasType(
     typesFor([application({ currentStatus, followUpAt: daysAgo(1) })], []),
     followUpFlagType,
@@ -140,7 +281,12 @@ assertMissingType(
   followUpFlagType,
 );
 
-for (const currentStatus of ["rejected", "withdrawn"]) {
+assertMissingType(
+  typesFor([application({ followUpAt: now.toISOString() })], []),
+  followUpFlagType,
+);
+
+for (const currentStatus of ["offer", "rejected", "withdrawn"]) {
   assertMissingType(
     typesFor([application({ currentStatus, followUpAt: daysAgo(1) })], []),
     followUpFlagType,
@@ -220,6 +366,66 @@ computeAttentionFlags(immutableApplications, immutableEvents, now);
 assert.equal(JSON.stringify(immutableApplications), applicationSnapshot);
 assert.equal(JSON.stringify(immutableEvents), eventSnapshot);
 
+const orderingEvents = [
+  event({
+    _id: "event-occurred-wins",
+    occurredAt: daysAgo(1),
+    scheduledAt: daysAgo(10),
+    createdAt: daysAgo(12),
+  }),
+  event({
+    _id: "event-scheduled",
+    scheduledAt: daysAgo(2),
+    createdAt: daysAgo(11),
+  }),
+  event({ _id: "event-created", createdAt: daysAgo(3) }),
+  event({
+    _id: "event-tie-later-created",
+    occurredAt: daysAgo(4),
+    createdAt: daysAgo(5),
+  }),
+  event({
+    _id: "event-tie-earlier-created",
+    occurredAt: daysAgo(4),
+    createdAt: daysAgo(6),
+  }),
+  event({ _id: "event-tie-id-b", occurredAt: daysAgo(7), createdAt: daysAgo(8) }),
+  event({ _id: "event-tie-id-a", occurredAt: daysAgo(7), createdAt: daysAgo(8) }),
+];
+const expectedOrdering = [
+  "event-tie-id-a",
+  "event-tie-id-b",
+  "event-tie-earlier-created",
+  "event-tie-later-created",
+  "event-created",
+  "event-scheduled",
+  "event-occurred-wins",
+];
+
+assert.deepEqual(
+  sortTimelineEvents(orderingEvents).map((item) => item._id),
+  expectedOrdering,
+);
+assert.deepEqual(
+  sortTimelineEvents([...orderingEvents].reverse()).map((item) => item._id),
+  expectedOrdering,
+);
+
+const inputOrderEvents = [
+  event({ _id: "apply_reference", occurredAt: daysAgo(16), createdAt: daysAgo(16) }),
+  event({
+    _id: "earlier_progress",
+    type: "hr_call",
+    occurredAt: daysAgo(20),
+    createdAt: daysAgo(1),
+  }),
+];
+
+assert.deepEqual(
+  computeAttentionFlags([application()], inputOrderEvents, now),
+  computeAttentionFlags([application()], [...inputOrderEvents].reverse(), now),
+);
+
 const upcomingEvents = computeUpcomingEvents(
   [
     application({ _id: "active_app", currentStatus: "in_process", company: "Active" }),
@@ -268,5 +474,22 @@ assert.deepEqual(upcomingEvents, [
     scheduledAt: daysFromNow(2),
   },
 ]);
+const attentionFlagsForUpcomingEvent = computeAttentionFlags(
+  [application({ _id: "active_app", currentStatus: "in_process" })],
+  [
+    event({
+      _id: "soon",
+      applicationId: "active_app",
+      type: "interview",
+      scheduledAt: daysFromNow(2),
+    }),
+  ],
+  now,
+);
+
+assert.ok(
+  !attentionFlagsForUpcomingEvent.some((flag) => flag.flagType === "UPCOMING_EVENT"),
+  "UPCOMING_EVENT must remain separate from attentionFlags",
+);
 
 console.log("Attention domain checks passed.");
