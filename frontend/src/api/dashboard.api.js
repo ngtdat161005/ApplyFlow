@@ -13,7 +13,7 @@ export function getDashboardSummary() {
 }
 
 export function getDashboardSummaryFromResponse(response) {
-  const summary = response?.dashboard || response?.summary || response?.data?.dashboard || response;
+  const summary = response?.dashboard;
 
   if (!summary || typeof summary !== 'object') {
     return EMPTY_DASHBOARD_SUMMARY;

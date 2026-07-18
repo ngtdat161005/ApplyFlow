@@ -15,7 +15,7 @@ export function UpcomingEventsPanel({ events = [] }) {
 
       {events.length === 0 ? (
         <div className="dashboard-empty-state">
-          <p>No upcoming events in the next few days.</p>
+          <p>No upcoming events.</p>
         </div>
       ) : (
         <div className="dashboard-list">

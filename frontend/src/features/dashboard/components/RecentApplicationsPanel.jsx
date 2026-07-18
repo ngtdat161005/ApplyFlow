@@ -22,10 +22,7 @@ export function RecentApplicationsPanel({ applications = [] }) {
 
       {applications.length === 0 ? (
         <div className="dashboard-empty-state">
-          <p>No applications yet.</p>
-          <Link className="text-link" to="/applications">
-            Create your first application
-          </Link>
+          <p>No recent applications are available.</p>
         </div>
       ) : (
         <div className="dashboard-list">
