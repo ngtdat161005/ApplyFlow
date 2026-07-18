@@ -2,12 +2,19 @@
 
 Use this checklist during the audit step for every V2 task. Mark items not applicable in the PR with a short reason.
 
+## Canonical Frontend Manual Regression
+
+Use [frontend/docs/manual-frontend-testcases.md](../frontend/docs/manual-frontend-testcases.md) for
+the executable V2 browser checklist, execution record, fixture strategy, result fields, and
+evidence notes. This document remains a concise cross-task risk checklist and does not duplicate
+those detailed cases.
+
 ## V2 Baseline Carry-Forward
 
 - Distinguish guaranteed V1 baseline behavior from current implementation details and explicit V2 improvements.
-- Do not treat `recentApplications` as guaranteed V1 baseline behavior; verify it only in dashboard tasks if it remains part of the response/UI.
-- Do not treat `followUpAt` sorting as guaranteed V1 baseline behavior; verify it only when V2-04 implements or preserves it as a list contract improvement.
-- Track dashboard status count naming as unresolved until V2-12 decides between `countsByStatus`, `statusCounts`, or a compatibility response.
+- Do not treat `recentApplications` as guaranteed V1 baseline behavior; V2-12/V2-13 preserve it as verified V2 dashboard polish with a limit of five.
+- Do not treat `followUpAt` sorting as guaranteed V1 baseline behavior; V2-04 owns it as an explicit list contract extension.
+- Use `countsByStatus` as the active dashboard status-count field selected and preserved by V2-12/V2-13; do not describe `statusCounts` as active.
 - Mark backend E2E, browser/manual regression, and remote CI as unverified unless the current task actually ran or inspected them.
 - Keep README corrections reserved for V2-17. Earlier tasks may record README risks but must not edit `README.md`.
 
