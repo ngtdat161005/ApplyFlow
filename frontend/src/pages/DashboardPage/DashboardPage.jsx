@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   getDashboardSummary,
@@ -12,37 +13,56 @@ import { UpcomingEventsPanel } from '../../features/dashboard/components/Upcomin
 import { getErrorMessage } from '../../features/auth/auth.utils.js';
 import './DashboardPage.css';
 
-const EMPTY_SUMMARY = {
-  countsByStatus: {},
-  totalApplications: 0,
-  recentApplications: [],
-  upcomingEvents: [],
-  attentionFlags: [],
-};
-
 export default function DashboardPage() {
-  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [summary, setSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const requestIdRef = useRef(0);
+  const requestPendingRef = useRef(false);
 
   const loadDashboardSummary = useCallback(async () => {
+    if (requestPendingRef.current) {
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    requestPendingRef.current = true;
     setIsLoading(true);
     setLoadError('');
+    setSummary(null);
 
     try {
       const response = await getDashboardSummary();
-      setSummary(getDashboardSummaryFromResponse(response));
+
+      if (requestId === requestIdRef.current) {
+        setSummary(getDashboardSummaryFromResponse(response));
+      }
     } catch (error) {
-      setSummary(EMPTY_SUMMARY);
-      setLoadError(getErrorMessage(error, 'Unable to load dashboard summary.'));
+      if (requestId === requestIdRef.current) {
+        setLoadError(getErrorMessage(error, 'Unable to load dashboard summary.'));
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        requestPendingRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     loadDashboardSummary();
+
+    return () => {
+      requestIdRef.current += 1;
+      requestPendingRef.current = false;
+    };
   }, [loadDashboardSummary]);
+
+  const hasNoApplications =
+    !isLoading && !loadError && summary?.totalApplications === 0;
+  const hasApplications =
+    !isLoading && !loadError && summary?.totalApplications > 0;
 
   return (
     <section className="page-section dashboard-page" aria-labelledby="dashboard-title">
@@ -55,21 +75,40 @@ export default function DashboardPage() {
       </div>
 
       {isLoading ? (
-        <section className="applications-state" aria-live="polite">
-          <p>Loading dashboard...</p>
+        <section
+          className="applications-state applications-state-loading dashboard-page-state"
+          aria-live="polite"
+          role="status"
+        >
+          <h3>Loading dashboard</h3>
+          <p>Retrieving your latest application summary.</p>
         </section>
       ) : null}
 
       {loadError ? (
-        <section className="applications-state applications-state-error" role="alert">
+        <section
+          className="applications-state applications-state-error dashboard-page-state"
+          role="alert"
+        >
+          <h3>Dashboard unavailable</h3>
           <p>{loadError}</p>
-          <button type="button" onClick={loadDashboardSummary}>
+          <button disabled={isLoading} type="button" onClick={loadDashboardSummary}>
             Retry
           </button>
         </section>
       ) : null}
 
-      {!isLoading && !loadError ? (
+      {hasNoApplications ? (
+        <section className="applications-state applications-state-empty dashboard-page-state">
+          <h3>No applications yet</h3>
+          <p>Start tracking an application to see your dashboard summary.</p>
+          <Link className="button-primary dashboard-empty-action" to="/applications">
+            Go to applications
+          </Link>
+        </section>
+      ) : null}
+
+      {hasApplications ? (
         <>
           <DashboardSummaryCards
             countsByStatus={summary.countsByStatus}
