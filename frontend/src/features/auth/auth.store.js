@@ -14,6 +14,7 @@ import {
   register as registerRequest,
 } from '../../api/auth.api.js';
 import { subscribeToUnauthorizedResponse } from '../../api/http-client.js';
+import { queryClient } from '../../app/query-client.js';
 import {
   clearStoredAccessToken,
   getStoredAccessToken,
@@ -38,6 +39,7 @@ export function AuthProvider({ children }) {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
   const clearSession = useCallback(() => {
+    queryClient.clear();
     clearStoredAccessToken();
     setAccessToken(null);
     setUser(null);
