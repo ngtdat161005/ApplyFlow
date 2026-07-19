@@ -414,7 +414,7 @@ codex/v3-03-query-foundation
 ### Requirements
 
 - Install the repository-compatible stable version of `@tanstack/react-query`; inspect current React/package versions first.
-- Implement `app/query-client.js`, Query Client provider wiring, and centralized key factories from spec §2.4.
+- Implement `app/query-client.js`, Query Client provider wiring, and centralized key factories from spec §2.3.
 - Preserve the existing AuthProvider/store; provider ordering must not break auth bootstrap.
 - Do not build a generic API framework, custom cache wrapper, optimistic updates, or devtools dependency.
 - Ensure filters will be canonical serializable objects.

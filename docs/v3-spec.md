@@ -1,63 +1,160 @@
 # ApplyFlow — V3 Specification
 
-## 1. Product Overview
+## 1. Product Context, Authority, and Scope
 
-### 1.1 V3 Goal
+### 1.1 Product identity
 
-V3 improves ApplyFlow in two areas, for the purpose of Fullstack SWE internship portfolio credibility:
+ApplyFlow remains a private, single-user job/internship application tracker for students, new graduates, and individual job seekers.
 
-1. **Data-fetching architecture** — replace the ad-hoc `refreshKey`/manual `isLoading`/`fetchError` pattern with a structured query layer.
-2. **Account lifecycle completeness** — add the two flows explicitly flagged as missing in V1/V2: password reset and account deletion.
+V3 does not change the core product defined by the V1 specification and hardened by V2. Users still manage:
 
-V3 also raises frontend visual quality (design tokens, auth page, in-app micro-interactions), but this is secondary to the two goals above and must not compromise them.
+- applications;
+- application statuses;
+- recruitment events and timelines;
+- follow-up dates;
+- attention flags;
+- dashboard summaries.
 
-### 1.2 V3 Philosophy
+ApplyFlow remains neither a job board nor an applicant-tracking system for employers. It does not apply to jobs on a user's behalf.
 
-V3 is **not** a pursuit of a real product with real users. It does not add:
+### 1.2 V3 goal
 
-- CORS for multi-domain deployment
-- global rate limiting
-- OAuth-based email reading (Gmail integration)
-- SMS/Twilio integration
-- any distributed locking / state-machine complexity beyond what is specified in §7.4
+V3 improves ApplyFlow in three bounded areas for Fullstack SWE portfolio credibility:
 
-V3 must avoid becoming a rewrite. CSS stays hand-written (no Tailwind/MUI). `@tanstack/react-query` is the only mandatory new frontend runtime dependency. A narrowly scoped backend dependency for rate limiting or Resend may be added only if the implementation task documents why the existing runtime cannot meet the contract safely; dependency additions must not expand into a generic infrastructure rewrite.
+1. **Frontend data-fetching architecture** — replace ad-hoc `refreshKey`, duplicated loading state, and manual invalidation with TanStack Query.
+2. **Account lifecycle completeness** — add password reset and authenticated account deletion.
+3. **Frontend quality** — strengthen design tokens, loading UX, motion restraint, accessibility, and Auth presentation.
 
-### 1.3 Out of Scope for V3
+V3 is not an attempt to prove product-market fit or pursue real users. Real-user expansion remains deferred until a concrete problem, affected user group, and current workaround have been validated through interviews.
 
-- Multi-domain CORS configuration
-- Global API rate limiting (forgot-password has a scoped exception — see §6.4)
-- OCR/vision job-posting extraction (deferred to V4, undecided)
-- Gmail/email-reading integration
-- SMS reminders
-- Settings page features beyond the account-deletion danger zone (e.g. profile editing, notification preferences)
-- `deletionPending` state machine / deletion recovery flow (see §7.4 known limitation)
+### 1.3 Specification model
+
+This document is an **incremental/delta specification**, not a standalone rewrite of V1 and V2.
+
+Source-of-truth order for V3 work:
+
+1. `AGENTS.md` controls repository/agent operating rules.
+2. `docs/v3-spec.md` controls behavior explicitly added or changed by V3.
+3. `docs/v3-tasks.md` controls task order, branch/PR scope, merge gates, and human-approval checkpoints.
+4. `docs/v2-spec.md` controls all finalized V2 product, API, validation, privacy, and frontend contracts not changed here.
+5. `docs/ApplyFlow Specification.md` controls the underlying V1 product/domain baseline where V2 and V3 are silent.
+6. `docs/ApplyFlow Architecture.md` controls existing architecture until a V3 task intentionally updates it.
+7. `docs/test-plan.md` and `docs/regression-checklist.md` control verification procedure and evidence classification.
+
+If two applicable sources materially conflict and this precedence does not resolve the conflict, Codex must stop and ask. It must not invent a compatibility rule merely to continue implementation.
+
+### 1.4 V1/V2 preservation rule
+
+Unless this document explicitly changes a contract, V3 must preserve the merged V2 behavior and the V1 domain beneath it.
+
+V3 must not silently change:
+
+- existing route paths or the configured API base prefix;
+- existing request/response fields;
+- existing HTTP status codes;
+- the shared V2 error middleware contract;
+- registration, login, `/auth/me`, frontend logout, and protected-route behavior;
+- JWT expiry/signature behavior except for the explicit `tokenVersion` extension in §6.7;
+- user ownership and cross-user `404` privacy behavior;
+- application fields, statuses, search/filter/sort behavior, CRUD, or cascade semantics;
+- event fields, event types, validation, ownership, CRUD, or timeline ordering;
+- dashboard fields and behavior finalized by V2;
+- attention-flag rules, thresholds, dates, ordering, or separation from upcoming events;
+- MongoDB collection names already used by V2;
+- existing environment-variable names;
+- responsive and loading/empty/error states already required by V2.
+
+Silence in V3 is not authorization to remove, rename, reinterpret, or “clean up” a V1/V2 contract.
+
+### 1.5 Architecture preservation and intentional deltas
+
+Backend remains a modular monolith with the existing layered flow:
+
+```text
+Route → Middleware → Controller → Service → Repository → MongoDB
+```
+
+Controllers handle HTTP concerns, services own orchestration/business rules, and repositories own MongoDB operations. V3 must not introduce Mongoose, Prisma, microservices, generic CRUD base classes, background-job infrastructure, or a broad authentication rewrite.
+
+Frontend retains React, Vite, React Router, the existing Auth store/provider, feature/page separation, API modules, and plain CSS.
+
+The intentional V3 architecture deltas are limited to:
+
+- TanStack Query for application list, application detail, application events, and dashboard server state;
+- an email adapter for password-reset delivery;
+- `passwordResetTokens` persistence;
+- `tokenVersion` validation in authenticated requests;
+- MongoDB transactions for reset-token consumption and account deletion;
+- the three V3 frontend routes defined in §8.
+
+### 1.6 Dependency policy
+
+- `@tanstack/react-query` is the only mandatory new frontend runtime dependency.
+- No Tailwind, MUI, CSS-in-JS system, animation library, Redux migration, or form framework.
+- A narrowly scoped backend dependency for Resend or forgot-password rate limiting may be added only by its owning task, after inspecting current Node/package versions and documenting the justification.
+- Do not add Redis or distributed rate-limit infrastructure in V3.
+- Do not guess dependency versions. Resolve versions from the current repository/runtime and official package compatibility information at implementation time.
+
+### 1.7 Out of scope
+
+- multi-domain CORS work;
+- global API rate limiting beyond the forgot-password exception;
+- refresh tokens;
+- OAuth or Gmail inbox access;
+- Twilio/SMS;
+- profile editing, notification preferences, or Settings features beyond account deletion;
+- account `deleting`/recovery state machine;
+- OCR/vision job-posting extraction;
+- optimistic updates or animated list reordering;
+- product-market-fit or user-growth work.
 
 ---
 
-## 2. Query Layer
+## 2. TanStack Query Layer
 
-### 2.1 Dependency
+### 2.1 Scope
 
-Add `@tanstack/react-query` as the only new frontend runtime dependency in V3.
+Migrate server state for these domains only:
 
-### 2.2 Scope
+- applications list;
+- application detail;
+- application events;
+- dashboard summary.
 
-Migrate to `useQuery`/`useMutation` for these domains only:
+The existing Auth store/provider remains the source of truth for access tokens, auth bootstrap, current user, login, register, and logout. Do not migrate Auth state to TanStack Query.
 
-- applications (list)
-- application detail
-- application events
-- dashboard summary
+### 2.2 Provider and client
 
-**Explicitly excluded from migration:** `AuthProvider` / auth state (`features/auth/auth.store.js`) stays as-is.
+- Replace the empty `app/query-client.js` placeholder with one shared `QueryClient`.
+- Mount exactly one `QueryClientProvider` in the existing provider composition.
+- Preserve provider ordering required by Auth bootstrap and protected routing.
+- Do not add React Query Devtools as a runtime dependency in V3.
 
-### 2.3 Non-goals
+Default behavior:
 
-- No optimistic updates in V3.
-- No generic fetch/API abstraction framework — use `@tanstack/react-query` directly with a thin `queryFn` per domain.
+```js
+{
+  queries: {
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    retry: retryNetworkOrServerFailureOnce
+  },
+  mutations: {
+    retry: false
+  }
+}
+```
 
-### 2.4 Query key factory
+`retryNetworkOrServerFailureOnce` means:
+
+- at most one retry for a network failure or retryable `5xx` response;
+- no retry for `4xx`, including `400`, `401`, `404`, `409`, or `429`;
+- no hidden infinite retry loop.
+
+The existing global unauthorized handling remains authoritative for `401`. TanStack Query must not create a second conflicting logout/redirect mechanism.
+
+### 2.3 Query-key factory
 
 ```js
 export const applicationKeys = {
@@ -74,38 +171,74 @@ export const dashboardKeys = {
 };
 ```
 
-### 2.5 Invalidation rules
+Rules:
 
-| Mutation | Must invalidate |
+- Query keys contain only stable, serializable values.
+- List filters are canonical objects containing only supported backend fields.
+- Search is trimmed before entering the canonical key.
+- Do not include DOM events, functions, component instances, raw form objects, or transient presentation state.
+- Detail/event queries are disabled until the required application ID is present and valid enough for the existing route validation flow.
+
+### 2.4 Query functions and API ownership
+
+- Existing `src/api` modules remain the only place that constructs HTTP requests.
+- Query functions call those API modules; they do not duplicate fetch/client logic in components.
+- TanStack Query does not replace backend validation or authorization.
+- Existing V2 response shapes remain unchanged.
+
+### 2.5 Mutation invalidation
+
+| Successful mutation | Required cache action |
 |---|---|
-| create application | `applicationKeys.lists()`, `dashboardKeys.summary()` |
-| update application | `applicationKeys.detail(id)`, `applicationKeys.lists()`, `dashboardKeys.summary()` |
-| delete application | `applicationKeys.lists()`, `dashboardKeys.summary()` |
-| create/update/delete event | `applicationKeys.events(applicationId)`, `dashboardKeys.summary()` |
+| Create application | Invalidate `applicationKeys.lists()` and `dashboardKeys.summary()` |
+| Update application | Invalidate `applicationKeys.detail(id)`, `applicationKeys.lists()`, and `dashboardKeys.summary()` |
+| Delete application | Invalidate lists/dashboard and remove deleted detail/event queries |
+| Create/update/delete event | Invalidate `applicationKeys.events(applicationId)` and `dashboardKeys.summary()` |
 
-After a successful application deletion, remove the deleted application's detail and event queries from the cache in addition to invalidating list/dashboard queries. Do not leave deleted private data available through a stale detail cache entry.
+No optimistic updates in V3.
 
-Filters used in query keys must be a canonical object containing only supported API fields with stable primitive values. Do not place event objects, functions, transient UI state, or untrimmed search input in a query key.
+After application deletion, stale detail/event data for that application must not remain readable from the client cache.
 
-### 2.6 Migration order
+### 2.6 Loading, background refetch, and errors
 
-1. `queryClient` setup in `app/query-client.js` (replace current empty placeholder), `QueryClientProvider` in `app/providers.jsx`.
+- Initial pending state may render a layout-matching skeleton.
+- Background fetching after data exists must retain current content and use a subtle updating state; it must not replace the whole page with a skeleton.
+- Mutation pending state must prevent duplicate submission for the affected action.
+- Query error state must retain the V2 retry/error affordance.
+- Empty and filtered-empty results remain successful data states, not errors.
+- A previous successful result must not be exposed after logout or account deletion.
+
+### 2.7 Private-cache lifecycle
+
+Clear all private Query Client data after:
+
+- explicit logout;
+- global unauthorized session invalidation;
+- successful account deletion.
+
+Do not clear private cache before account deletion succeeds. Wrong-password and service-unavailable responses must keep the authenticated session and current data intact.
+
+### 2.8 Migration order
+
+1. Query Client/provider and key factory.
 2. Applications list.
 3. Application detail.
 4. Events.
 5. Dashboard.
 
-Each step replaces `refreshKey`, local `isLoading`, and local `fetchError` state in the corresponding page with `useQuery` status fields.
+Each migration removes the corresponding `refreshKey` and duplicated request state only after equivalent V2 loading, empty, error, retry, validation, privacy, and navigation behavior is preserved.
 
 ---
 
 ## 3. Design Tokens
 
-All values live in `frontend/src/styles.css` as CSS custom properties. No new files, no CSS-in-JS.
+### 3.1 Token location and scope
 
-### 3.1 Type scale
+Global values remain CSS custom properties in `frontend/src/styles.css`. V3 does not introduce CSS-in-JS or a second styling system.
 
-```
+### 3.2 Type scale
+
+```css
 --font-size-xs: 12px;
 --font-size-sm: 14px;
 --font-size-base: 16px;
@@ -114,9 +247,9 @@ All values live in `frontend/src/styles.css` as CSS custom properties. No new fi
 --font-size-2xl: 36px;
 ```
 
-### 3.2 Spacing scale
+### 3.3 Spacing scale
 
-```
+```css
 --space-1: 4px;
 --space-2: 8px;
 --space-3: 12px;
@@ -126,74 +259,119 @@ All values live in `frontend/src/styles.css` as CSS custom properties. No new fi
 --space-12: 48px;
 ```
 
-### 3.3 Color
+### 3.4 Color and radius
 
-- Existing primary accent is unchanged.
-- Add one secondary accent (`--color-accent-secondary`), used only for deliberate emphasis (e.g. a highlighted stat on the dashboard), never as the sole indicator of state — must always be paired with text or an icon.
-- Secondary accent must meet WCAG AA contrast (4.5:1) against its background.
+- Preserve the existing primary accent and status-color semantics.
+- Add one `--color-accent-secondary` for deliberate emphasis.
+- Secondary accent must meet WCAG AA text contrast where used for text.
+- Color must never be the only state signal; pair it with text and/or an icon.
+- Preserve the system radius of 8px through the existing or normalized `--radius-base` token.
 
-### 3.4 Radius
+### 3.5 Migration boundary
 
-`--radius-base: 8px` — unchanged, already consistent across the app.
+Tokenize repeated typography and spacing patterns where the corresponding scale value preserves visual intent.
 
----
+V3 does **not** require zero raw pixel values. Do not mechanically replace:
 
-## 4. Motion & Accessibility Rules
+- breakpoints;
+- border widths;
+- icon sizes;
+- illustration geometry;
+- component-specific min/max dimensions;
+- calculated values;
+- values whose change would alter layout behavior.
 
-These rules are binding for every animation added in V3:
-
-1. Respect `prefers-reduced-motion: reduce` — when set, disable non-essential motion (parallax, gradient animation, hover elevation transition); keep only instant state changes.
-2. Parallax (auth page) is disabled on touch devices and under reduced-motion.
-3. Continuous pointer-tracking effects (parallax) must update via CSS custom properties or `requestAnimationFrame`, never via `setState` on every `mousemove` event.
-4. Allowed animated properties: `opacity`, `box-shadow`, `background-position`, `transform` (transform only for decorative elements, never for cards in dense lists — see §5.3).
-5. No layout shift caused by animation.
-6. Skeleton loaders must carry `aria-hidden="true"` on decorative skeleton nodes, plus a visually-hidden loading announcement for screen readers.
-7. Route/page transitions are **fade-in on mount**, not crossfade — React Router unmounts the previous route immediately, so there is no previous element left to fade out. No shared-layout or animation-presence logic is required in V3.
-
-These rules apply to all frontend motion introduced by V3, including auth pages, protected pages, loading states, and the new Settings page. They do not change backend behavior.
+The token task must not become an Auth redesign, layout rewrite, or broad formatting churn.
 
 ---
 
-## 5. Frontend — Visual Work
+## 4. Motion and Accessibility
 
-### 5.1 Auth pages (Login/Register)
+These rules apply to all motion introduced by V3.
 
-- Split-screen layout. Form on one side; a static-content panel on the other.
-- Panel content: reuse real presentational components (`ApplicationCard`, `StatusBadge`, a dashboard summary block) fed with hardcoded sample data, clearly labeled "Sample data" in the UI.
-  - **Guardrail:** if wiring a component into the preview panel requires modifying that component's production behavior (adding new required props, coupling it to router context it doesn't already need, etc.), stop and replace the panel with a static illustration instead. Do not fork or duplicate markup to fake a preview.
-  - Preview must not trigger navigation or any mutation.
-  - No real user data may appear in the panel before login.
-- Background: CSS `@keyframes` animating `background-position` on a gradient. Duration ≥ 12s, ease, infinite loop.
-- Parallax: pointer-tracked tilt on the illustration panel only, ±8px translation, via CSS variables updated through a throttled pointer handler. Disabled per §4.2–4.3.
-- Login ↔ Register transition: fade-in on mount per §4.7.
-
-### 5.2 In-app pages (Dashboard, Applications, Application Detail)
-
-- Route fade-in on mount, 150–200ms, per §4.7.
-- Card hover: `box-shadow` elevation only. No `transform: scale`.
-- Replace `full-page-loader` with a skeleton matching each page's real layout (card skeleton for list/dashboard, detail skeleton for application detail).
-- List filter/sort transition: `opacity` only, ≤200ms total, no reordering animation in V3.
-- Shared identity with auth pages: same font-family, same primary accent, same `--radius-base`. Motion pacing may differ.
+1. Respect `prefers-reduced-motion: reduce`.
+2. Under reduced motion, disable gradient animation, parallax, hover transitions, and decorative fades; preserve instant functional state changes.
+3. Disable pointer parallax on touch/coarse-pointer devices.
+4. Pointer tracking uses CSS variables and `requestAnimationFrame`; never React `setState` for every pointer event.
+5. Animate only `opacity`, `box-shadow`, `background-position`, and decorative `transform`.
+6. Dense-list cards must not scale or translate on hover.
+7. Animation must not cause layout shift.
+8. Route transitions are fade-in on mount, not true crossfades or animation-presence systems.
+9. Decorative skeleton nodes use `aria-hidden="true"`; a screen-reader loading announcement remains available.
+10. Modal focus moves into the dialog, remains trapped while open, and returns to the invoking control when closed.
+11. Forms retain programmatic labels, keyboard submission, understandable errors, and visible focus.
 
 ---
 
-## 6. Backend — Password Reset
+## 5. Frontend Visual Work
 
-### 6.1 Flow
+### 5.1 Shared identity
 
-1. `POST /auth/forgot-password` with `{ email }`.
-2. Server normalizes email (existing `normalizeEmail` — lowercase/trim).
-3. If a user with that email exists: invalidate/delete any existing reset token(s) for that user, generate a new token, store its hash, send email via the email adapter (§6.6).
-4. If no user exists: perform equivalent-cost work (see §6.4) and respond identically.
-5. The user opens the reset link → the frontend reset-password page reads the token from the URL; there is no backend `GET` reset endpoint and the frontend does not call the API until submit.
-6. `POST /auth/reset-password` with `{ token, newPassword }` → validate token, update password, increment `tokenVersion`, delete the token.
+Auth and protected pages remain one product:
 
-### 6.2 Token generation and storage
+- same font family;
+- same primary accent;
+- same radius/token system;
+- same status semantics;
+- compatible form/button language.
 
-- Raw token: `crypto.randomBytes(32).toString('hex')`.
-- Stored value: `crypto.createHash('sha256').update(rawToken).digest('hex')` — **SHA-256, not bcrypt**. The token is already high-entropy random data; bcrypt's slow hashing is unnecessary cost designed for low-entropy human passwords, not for this case.
-- Comparison: hash the incoming token and compare with `crypto.timingSafeEqual` against the stored hash.
-- Expiry: 30 minutes from creation.
+Auth may use richer presentation and slower decorative motion; protected pages prioritize repeated use and restraint.
+
+### 5.2 Login and Register
+
+- Use a split-screen layout at suitable desktop width and a single-column layout on narrow screens.
+- One side contains the existing functional form.
+- The other side may show real presentational components with hardcoded sample data clearly labeled `Sample data`.
+- Preview content is inert: no navigation, API call, mutation, or real user data.
+- A small, optional `readOnly`/preview mode is permitted only when it does not distort production component behavior.
+- If reuse requires meaningful router/action coupling or broad production-component edits, use a static CSS/HTML illustration instead. Do not fork production markup into a fake duplicate application UI.
+- Gradient animation uses CSS `background-position`, duration at least 12 seconds.
+- Decorative parallax is limited to approximately ±8px and follows §4.
+- Login/Register mount with opacity fade-in; true route crossfade is not required.
+- Preserve every V2 form, validation, auth bootstrap, protected redirect, and logout behavior.
+
+### 5.3 Protected pages
+
+- Dashboard, Applications, Application Detail, and Settings may fade in over 150–200ms on mount.
+- Card hover changes box shadow only.
+- Initial skeletons approximate real page geometry.
+- Application filter/sort feedback uses opacity only, no animated reordering.
+- Background query refetch does not blank or skeletonize an already usable page.
+- Existing empty, filtered-empty, not-found, validation, API-error, and navigation behavior remains required.
+
+### 5.4 Responsive baseline
+
+- No horizontal page overflow at the existing supported mobile widths.
+- Auth preview may move below the form or be hidden when space is insufficient, but the functional form remains first-class.
+- Dialogs fit within narrow viewports and remain keyboard usable.
+- Motion is not required to communicate any state.
+
+---
+
+## 6. Password Reset and Session Invalidation
+
+### 6.1 End-to-end flow
+
+1. User submits email to `POST /auth/forgot-password`.
+2. Backend validates and normalizes the email using existing conventions.
+3. Rate limits are applied whether or not the account exists.
+4. If the account exists, old reset tokens are invalidated, a new high-entropy token is created, only its hash is stored, and the raw token appears only in the delivery URL.
+5. If no account exists, the same public success contract is returned.
+6. User opens `/reset-password?token=...` on the configured frontend origin.
+7. Frontend sends the token only when submitting `POST /auth/reset-password`.
+8. Backend atomically consumes the token, updates the password, and increments `tokenVersion`.
+9. Reset does not issue a JWT or automatically log the user in.
+
+There is no backend reset-token validation `GET` endpoint in V3.
+
+### 6.2 Password-reset token
+
+- Generate with `crypto.randomBytes(32).toString('hex')`.
+- Store `SHA-256(rawToken)` as a fixed-length hexadecimal hash.
+- Do not use bcrypt for the high-entropy reset token.
+- Hash the submitted token and compare fixed-length buffers with `crypto.timingSafeEqual` where comparison occurs in application code.
+- Default expiry: 30 minutes.
+- Raw token must not enter application logs, committed evidence, analytics, local storage, or persisted auth state.
 
 ### 6.3 `passwordResetTokens` collection
 
@@ -207,159 +385,508 @@ These rules apply to all frontend motion introduced by V3, including auth pages,
 }
 ```
 
-Indexes:
-- `{ userId: 1 }` — used to enforce "invalidate existing token before creating new one" at the service layer (see rule below).
-- TTL index on `expiresAt` — **cleanup only, not an authorization mechanism.** The TTL background monitor runs periodically and does not guarantee immediate deletion at the exact expiry moment. `reset-password` must always check `expiresAt` against the current time directly in application logic; it must never rely on "the document still exists" as proof the token is unexpired.
+Required indexes:
 
-Service-layer invariant: "at most one active token per user" is enforced by explicitly deleting/invalidating all existing tokens for a `userId` before inserting a new one — not by any index constraint. Deleting old tokens and inserting the replacement should use one transaction when the active deployment supports transactions. The reset flow must remain correct even while an expired token document is still waiting for TTL cleanup.
+- `{ userId: 1 }` for user-token replacement/cleanup;
+- TTL index `{ expiresAt: 1 }` with `expireAfterSeconds: 0`.
 
-One-time-use concurrency rule: password reset must not use a non-atomic "find token, then later delete token" sequence. Inside one transaction, atomically claim the matching unexpired token (for example with `findOneAndDelete` using `tokenHash` and `expiresAt: { $gt: now }`), update the password hash, and increment `tokenVersion`. If any step fails, aborting the transaction must restore the token claim. This prevents two concurrent submissions from successfully using the same raw token. If transactions are unavailable, return `503` with `{ "error": "RESET_UNAVAILABLE" }`; do not fall back to a replay-prone sequence.
+TTL is cleanup only. Authorization always checks `expiresAt > now`; document existence does not prove validity because TTL deletion is asynchronous.
 
-Logging rule: raw tokens and raw emails must never be written to application logs. Log the `userId` and event type only.
+Service invariant: at most one active reset token per user. A new request invalidates previous tokens before the replacement becomes active. Replacement must not rely on TTL timing.
 
-### 6.4 Rate limiting (scoped exception to "no global rate limiting")
+### 6.4 Forgot-password request
 
-`POST /auth/forgot-password` is rate-limited:
+Endpoint, under the existing API base prefix:
 
-- Limit: 5 requests per 15 minutes, keyed by normalized email.
-- Limit: 20 requests per hour, keyed by IP.
-- On limit exceeded: `429`, generic error body, no indication of which key (email or IP) triggered the limit.
-- The rate-limit policy is identical regardless of whether the email belongs to a real account — do not skip rate-limiting for the "email not found" branch.
-- The "email exists" and "email does not exist" branches should perform comparable work (e.g. the non-existent-email branch still does a normalized lookup and a constant-time no-op) to avoid an obvious timing signal that reveals account existence. Exact timing parity is not required — the goal is to avoid a trivially observable difference, not to guarantee cryptographic timing safety.
-- The chosen limiter must define trusted-proxy/IP behavior explicitly and must not trust arbitrary forwarded headers by default. If an in-memory limiter is used for the single-instance portfolio deployment, document that counters reset on restart and are not shared across instances; do not present it as distributed protection.
-
-### 6.5 Response contract
-
-Both branches (`POST /auth/forgot-password`) return the same shape and status on success:
-
-```json
-{ "message": "If an account with that email exists, a reset link has been sent." }
+```http
+POST /auth/forgot-password
+Content-Type: application/json
 ```
 
-`POST /auth/reset-password` error cases:
+Request:
 
-| Condition | Status | Body |
-|---|---|---|
-| token missing/malformed | 400 | `{ "error": "INVALID_TOKEN" }` |
-| token not found / already used | 400 | `{ "error": "INVALID_TOKEN" }` |
-| token expired | 400 | `{ "error": "TOKEN_EXPIRED" }` |
-| password fails policy (< 8 chars) | 400 | `{ "error": "WEAK_PASSWORD" }` |
-| transaction support unavailable | 503 | `{ "error": "RESET_UNAVAILABLE" }` |
-| success | 200 | `{ "message": "Password updated." }` |
+```json
+{ "email": "user@example.com" }
+```
 
-`INVALID_TOKEN` and `TOKEN_EXPIRED` are distinguished server-side but both should be presented to the user as "this link is invalid or has expired" — no need for the frontend to branch on which one.
+Validation:
 
-### 6.6 Email adapter
+- body accepts only `email`;
+- email is required, string, trimmed/lowercased through the existing normalization rule, and valid format;
+- malformed input uses the preserved V2 validation shape from §10.2;
+- unknown body fields follow the V2 shared validation policy.
 
-- Interface: `sendPasswordResetEmail({ to, resetUrl })`, implemented by a `backend/src/services/email/` module.
-- Default implementation: Resend, called only from inside this adapter — never directly from `auth.controller.js` or `auth.service.js`.
-- Test/local implementation: console-log transport (prints the reset URL instead of sending), selected via `EMAIL_PROVIDER=console`.
-- The console transport is development-only. It must not be selectable in production, and tests must capture it without exposing the raw token in normal CI output.
-- CI must not depend on a real Resend API call.
-- Missing `RESEND_API_KEY` when `EMAIL_PROVIDER=resend` must fail fast at startup with a clear configuration error, not fail silently on first send attempt.
-- A provider failure must never change the public response in a way that reveals whether the email exists. Record a sanitized operational error and ensure no usable token is left active when delivery fails.
+Normal public response for both existing and non-existing accounts:
+
+```http
+200 OK
+```
+
+```json
+{
+  "message": "If an account with that email exists, a reset link has been sent."
+}
+```
+
+The endpoint is deliberately `200`, not `202`, because V3 has no background job/queue contract.
+
+### 6.5 Scoped rate limiting
+
+Forgot-password is the only V3 exception to “no global rate limiting”:
+
+- 5 requests per 15 minutes per normalized email;
+- 20 requests per 60 minutes per client IP;
+- rate-limited response: `429` using the V3 extension shape from §10.3;
+- response does not reveal whether email or IP triggered the limit;
+- policy applies equally to existing and non-existing accounts;
+- do not trust arbitrary forwarded headers; align proxy trust with actual deployment configuration.
+
+Canonical V3 implementation is an **in-memory, single-instance limiter**. Accepted limitations:
+
+- counters reset on process restart;
+- counters are not shared across server instances;
+- it is not distributed abuse protection.
+
+Do not add Redis or a MongoDB rate-limit collection. These limitations are acceptable for the current portfolio deployment and must be documented, not hidden.
+
+The email limiter key should be derived from a one-way hash of the normalized email rather than retaining the raw email as an in-memory key. Limiter keys must not be logged.
+
+### 6.6 Email adapter and reset URL
+
+Interface:
+
+```js
+sendPasswordResetEmail({ to, resetUrl })
+```
+
+Rules:
+
+- Resend is the production-like provider and is accessed only through the adapter.
+- Auth controller/service must not call provider-specific APIs directly.
+- `FRONTEND_ORIGIN` is validated at startup and used to construct the reset URL.
+- Do not construct the URL from an untrusted request `Origin`, `Host`, or forwarded header.
+- Resulting URL is `${FRONTEND_ORIGIN}/reset-password?token=${encodeURIComponent(rawToken)}`.
+- Email content contains no password, stored hash, access token, or sensitive account details.
+- `EMAIL_PROVIDER=console` is development/test only and must be rejected in production.
+- Tests capture/suppress the console delivery without printing raw tokens in normal CI output.
+- `EMAIL_PROVIDER=resend` requires `RESEND_API_KEY` and validated sender configuration.
+- CI does not call real Resend.
+
+If delivery fails for an existing account:
+
+- remove/disable the just-created usable token;
+- record a sanitized operational error without raw email or token;
+- retain the same generic public `200` response so provider failure does not reveal account existence.
+
+External email sending must not occur inside a MongoDB transaction callback that the driver may retry.
 
 ### 6.7 `tokenVersion`
 
-- New field on the `users` collection: `tokenVersion: number`, default `0` for new users. Existing users without the field are treated as `tokenVersion: 0` (chosen migration path — no forced logout on deploy).
-- JWT payload includes `tokenVersion` whenever a session token is issued. Password reset itself does not issue a new JWT and does not automatically log the user in.
-- `requireAuth` middleware: verify JWT signature, then load the user by id and compare `user.tokenVersion === payload.tokenVersion`. A mismatch is treated as an invalid session (401), same as an expired token.
-- **Architectural trade-off, explicitly accepted:** this changes `requireAuth` from a stateless JWT-only check to a JWT-plus-database-lookup check on every protected request. This is an accepted cost for the security guarantee (reset invalidates all other sessions), not a "free" change — full protected-route regression testing is required after this lands (§9).
-- On successful password reset: `$inc: { tokenVersion: 1 }` on the user document.
-- A JWT whose payload omits `tokenVersion` is treated as version `0`. A non-numeric or negative payload version is invalid and returns `401`.
-- Safe user response objects (`/auth/me`, login response) do not include `tokenVersion`.
+Users gain:
 
-### 6.8 Password policy
+```json
+{ "tokenVersion": 0 }
+```
 
-Reuses the existing register/login policy: minimum 8 characters, no additional complexity rules in V3.
+Rules:
+
+- New users store `tokenVersion: 0`.
+- Existing users without the field are read as version `0`; V3 does not force logout on deployment.
+- Every newly issued session JWT includes numeric, non-negative `tokenVersion`.
+- A JWT missing the claim is interpreted as version `0` for migration compatibility.
+- Non-numeric or negative JWT versions are invalid (`401`).
+- `requireAuth` verifies signature/expiry, loads the current user, and compares stored/current versions.
+- Missing user or version mismatch uses the existing unauthorized response behavior.
+- `/auth/me`, login, register, and other safe-user responses do not expose `tokenVersion`.
+- Successful reset increments the stored version by one in the same transaction as password update/token consumption.
+
+Accepted architectural cost: every protected request now requires a user lookup after JWT verification. Full protected-route/backend regression is mandatory.
+
+### 6.8 Atomic reset consumption
+
+Endpoint:
+
+```http
+POST /auth/reset-password
+Content-Type: application/json
+```
+
+Request:
+
+```json
+{
+  "token": "raw-reset-token",
+  "newPassword": "new-password"
+}
+```
+
+Validation:
+
+- accept only `token` and `newPassword`;
+- both are required strings;
+- password reuses the existing minimum-eight-character policy;
+- frontend confirmation is UX-only and is not sent as authoritative backend input.
+
+Within one shared `ClientSession` transaction:
+
+1. hash the raw token;
+2. atomically claim/delete one matching token with `expiresAt > now`;
+3. update the referenced user's password hash;
+4. increment `tokenVersion`;
+5. commit.
+
+Do not implement “find now, delete later”. Two concurrent requests using one raw token cannot both succeed. If any transaction step fails, abort restores the token claim and previous password/version.
+
+If transactions are unsupported/unavailable, return `503 RESET_UNAVAILABLE`; never fall back to a replay-prone non-atomic sequence. Always end the session in `finally`. Do not expose raw MongoDB errors.
+
+### 6.9 Password policy
+
+V3 preserves the existing policy: minimum 8 characters, no new complexity rules. Passwords continue to use the existing bcrypt configuration. V3 does not silently change bcrypt cost or registration/login validation.
 
 ---
 
-## 7. Backend — Account Deletion
+## 7. Authenticated Account Deletion
 
-### 7.1 Endpoint
+### 7.1 Endpoint and contract
 
-`DELETE /users/me` — requires auth, requires current password in the request body:
+Under the existing API base prefix:
 
-```json
-{ "password": "string" }
+```http
+DELETE /users/me
+Authorization: Bearer <session-token>
+Content-Type: application/json
 ```
 
-- The target user is always the authenticated user from the verified token — the endpoint accepts no `userId` parameter.
-- Incorrect password: `401`, `{ "error": "INVALID_PASSWORD" }`. Auth state is not cleared client-side on this response.
-- Success: `200`, `{ "message": "Account deleted." }`. No deleted user document or counts are returned.
-- Unexpected cascade/transaction failure: use the existing shared server-error contract. Do not reveal collection names, deletion counts, or transaction internals.
+Request:
 
-### 7.2 Cascade order
+```json
+{ "password": "current-password" }
+```
 
-1. Delete `application_events` for all applications owned by the user.
-2. Delete `applications` owned by the user.
-3. Delete `passwordResetTokens` for the user.
-4. Delete the `users` document.
+Rules:
 
-### 7.3 Transaction implementation
+- body accepts only `password`;
+- target identity always comes from `requireAuth`;
+- endpoint accepts no user ID parameter;
+- current password is rechecked against the current user;
+- wrong password mutates nothing and returns `401 INVALID_PASSWORD` through §10.3;
+- success returns `200` with `{ "message": "Account deleted." }` only;
+- do not return deleted documents, collection names, counts, hashes, or transaction details.
 
-- Obtain a `ClientSession` from the existing shared `MongoClient` instance.
-- Every delete operation in the cascade receives `{ session }`.
-- If any step fails, abort the transaction — no partial deletion is committed.
-- If the current deployment/connection does not support transactions (e.g. a non-replica-set MongoDB instance), the endpoint must fail explicitly with `503`, `{ "error": "DELETE_UNAVAILABLE" }` — it must **not** silently fall back to a non-atomic cascade.
-- MongoDB Atlas (including the M0 free tier) runs as a replica set and supports multi-document transactions. A local standalone MongoDB instance typically does not.
-- Test environments: unit/integration tests either run against a replica-set-enabled MongoDB (e.g. `mongodb-memory-server` in replica-set mode) or mock the transaction boundary. Any E2E suite running against a standalone instance must report the account-deletion transaction test as **SKIPPED**, never as a false pass.
+### 7.2 Atomic cascade
 
-### 7.4 Race condition — known limitation (accepted for V3)
+Use one `ClientSession` from the existing shared `MongoClient`. Every repository operation receives the same `{ session }`.
 
-A request that creates an application/event for the user could interleave with an in-flight deletion transaction, since V3 does not introduce a `deleting` account status or a mutation-rejection check. This is an accepted, documented limitation for this scope:
+Delete in this order:
 
-- Not solved: a `deletionPending`/`accountStatus` state machine with recovery semantics is out of scope for V3 — it materially increases scope (failure/recovery handling if the cascade fails after the account is marked as deleting).
-- Mitigated by: requiring password re-entry (adds friction/delay that makes accidental interleaving rare) and by running the cascade itself inside a single transaction (so within the transaction's own view, deletion is atomic).
-- This must be stated in `docs/v3-spec.md` (this document) and in the architecture doc, not silently left undocumented.
+1. `application_events` owned by the authenticated user;
+2. `applications` owned by the authenticated user;
+3. `passwordResetTokens` owned by the authenticated user;
+4. the authenticated `users` document.
+
+If any step fails, abort the transaction and commit no partial deletion. Always end the session.
+
+Unsupported/unavailable transactions return `503 DELETE_UNAVAILABLE`; no non-atomic fallback.
+
+### 7.3 Ownership and privacy
+
+- Client cannot nominate another user.
+- Existing cross-user application/event privacy remains unchanged.
+- Wrong password must not reveal additional account information.
+- A deleted user's old JWT fails subsequent authentication because the user lookup fails.
+
+### 7.4 Accepted concurrency limitation
+
+V3 does not add an account `deleting` state or recovery state machine. A separately authenticated mutation could theoretically interleave with deletion and create child data outside the transaction's snapshot.
+
+This limitation must be documented in architecture/release notes. Do not claim that V3 prevents every concurrent orphan scenario. The cascade itself remains atomic within its transaction.
 
 ### 7.5 Frontend behavior
 
-- Danger-zone action lives on a **new Settings/Profile page** (`pages/SettingsPage/`) — this page does not currently exist and must be created as a new route.
-- Confirmation modal → password field → submit is disabled while the request is in flight (no double-submit).
-- On `401 INVALID_PASSWORD`: show inline error, keep the user authenticated.
-- On success: clear local auth state, redirect to Login. Local state is only cleared after a successful `200` response, never optimistically before the request completes.
+- Account deletion exists only in protected `/settings` danger zone.
+- User must deliberately open confirmation and enter current password.
+- No optimistic logout/deletion.
+- Wrong password shows inline error and keeps session/data.
+- `503` or generic failure keeps session/data and permits retry.
+- Only successful `200` clears Auth state and all private query cache, then replaces/navigates to Login.
+- Browser Back must not reveal a cached private page after success.
 
 ---
 
-## 8. New Frontend Routes/Screens Introduced in V3
+## 8. New Frontend Routes and Page-State Contracts
 
-| Route | Purpose |
+### 8.1 Routes
+
+| Route | Access | Purpose |
+|---|---|---|
+| `/forgot-password` | Public | Request password-reset delivery |
+| `/reset-password?token=...` | Public | Set a new password using the email token |
+| `/settings` | Protected | Account danger zone |
+
+These routes extend, not replace, existing V2 routing.
+
+### 8.2 Forgot Password page
+
+Required states:
+
+| State | Required behavior |
 |---|---|
-| `/forgot-password` | Request a reset link (email form) |
-| `/reset-password?token=...` | Set a new password using the token from the email link |
-| `/settings` | Account settings; contains the delete-account danger zone |
+| Idle | Labeled email field and submit; link back to Login |
+| Client validation | Preserve input and show understandable field error |
+| Submitting | Disable duplicate submission and announce progress |
+| Success | Show the generic response; never confirm account existence |
+| Rate limited | Show a generic try-again-later message |
+| Service/network failure | Preserve email input and offer retry without claiming an email was sent |
 
----
+Login contains a discoverable “Forgot password?” link.
 
-## 9. Environment Variables (new in V3)
+### 8.3 Reset Password page
 
-| Variable | Purpose |
+Required states:
+
+| State | Required behavior |
 |---|---|
-| `EMAIL_PROVIDER` | `resend` \| `console` — selects the email adapter implementation |
-| `RESEND_API_KEY` | Required when `EMAIL_PROVIDER=resend` |
-| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | Default `30` |
-| `RESET_REQUEST_RATE_LIMIT_PER_EMAIL` | Default `5` per 15 minutes |
-| `RESET_REQUEST_RATE_LIMIT_PER_IP` | Default `20` per hour |
+| Missing URL token | Do not submit; show invalid/expired-link guidance |
+| Idle | New password and confirmation fields |
+| Mismatch/weak password | Preserve form values where safe and show field guidance |
+| Submitting | Disable duplicate submission and announce progress |
+| Invalid/used/expired token | Present one safe message: link is invalid or expired |
+| Reset unavailable | Show temporary-unavailability message; do not imply success |
+| Success | Clear password fields and navigate/link to Login; do not auto-login |
 
-The rate-limit windows must also be configurable or be represented by clearly named constants validated at startup; do not encode ambiguous values such as `5` and `20` without their associated window semantics.
+Raw reset token remains ephemeral and is never copied into Auth persistence/local storage.
+
+### 8.4 Settings page
+
+- Protected-route bootstrap/redirect behavior follows V2.
+- Scope is account deletion only in V3.
+- Danger-zone copy explains permanence and that applications/events are deleted.
+- Confirmation uses an accessible modal/dialog.
+- Cancel performs no API call and clears password input.
+- Wrong-password, submitting, unavailable, generic failure, and success behavior follow §7.5.
+
+### 8.5 Form/error consistency
+
+- Reuse existing V2 field-error/general-error presentation where practical.
+- Preserve user input after recoverable validation/network errors.
+- Clear sensitive password inputs after success and when closing deletion confirmation.
+- Do not show internal error codes as the only human-facing message.
 
 ---
 
-## 10. Verification / QA Checklist for V3
+## 9. Configuration and Environment
 
-- [ ] Applications list, detail, events, dashboard all read/write through React Query; `refreshKey` pattern removed from all four pages.
-- [ ] Mutation on an application updates the dashboard summary without a manual page refresh.
-- [ ] `prefers-reduced-motion: reduce` disables gradient animation, parallax, and hover elevation transitions on the auth page.
-- [ ] Parallax is inactive on a touch-device viewport.
-- [ ] Requesting a second password reset invalidates the first token (first token no longer works after the second request).
-- [ ] A reset link is unusable after its password has been successfully changed once.
-- [ ] Forgot-password returns the same HTTP status and public JSON body for an existing and a non-existing email; neither branch exposes account existence. Rate-limited requests may return the separately documented `429` contract.
-- [ ] Two concurrent submissions using the same reset token cannot both succeed.
-- [ ] 6th forgot-password request within 15 minutes for the same email returns `429`.
-- [ ] JWT issued before a password reset is rejected (401) on any protected route after the reset completes.
-- [ ] Account deletion removes all applications and events for that user (verified by direct DB query in test).
-- [ ] Account deletion with wrong password does not delete any data and does not clear the client session.
-- [ ] Account-deletion transaction test is explicitly marked SKIPPED in CI if run against a non-replica-set MongoDB instance, not marked as passing.
-- [ ] `/settings` page exists and is reachable only when authenticated.
+### 9.1 New variables
+
+| Variable | Required behavior |
+|---|---|
+| `FRONTEND_ORIGIN` | Absolute allowed frontend origin used to build reset URL; no path/query |
+| `EMAIL_PROVIDER` | `resend` or `console`; console forbidden in production |
+| `RESEND_API_KEY` | Required for Resend provider |
+| `RESEND_FROM_EMAIL` | Verified sender/from address required for Resend |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | Positive integer, default `30` |
+| `RESET_REQUEST_RATE_LIMIT_PER_EMAIL` | Positive integer, default `5` |
+| `RESET_REQUEST_RATE_LIMIT_EMAIL_WINDOW_MINUTES` | Positive integer, default `15` |
+| `RESET_REQUEST_RATE_LIMIT_PER_IP` | Positive integer, default `20` |
+| `RESET_REQUEST_RATE_LIMIT_IP_WINDOW_MINUTES` | Positive integer, default `60` |
+
+### 9.2 Validation
+
+- Centralized environment validation remains authoritative.
+- In development/test, `EMAIL_PROVIDER` may default to `console`; production must explicitly select `resend`.
+- Missing/invalid variables fail fast with a clear configuration error when required by the selected environment/provider.
+- `FRONTEND_ORIGIN` must use `http` or `https`; production requires the deployed HTTPS origin.
+- `.env.example` contains placeholders only.
+- CI uses safe dummy configuration and no real Resend credentials.
+- Existing V1/V2 environment names remain unchanged.
+
+### 9.3 Secret handling
+
+Never commit or report:
+
+- real MongoDB connection strings;
+- JWT secrets;
+- Resend API keys;
+- raw reset tokens;
+- password values;
+- private test-account credentials.
+
+Test evidence may use redacted identifiers and disposable accounts.
+
+---
+
+## 10. Validation, API, and Error Compatibility
+
+### 10.1 Existing V2 contract remains primary
+
+V3 does not replace the shared V2 API/error policy.
+
+Existing validation errors remain:
+
+```json
+{
+  "message": "Validation failed",
+  "errors": {
+    "fieldName": "Human-readable error"
+  }
+}
+```
+
+Existing general errors remain:
+
+```json
+{
+  "message": "Human-readable error"
+}
+```
+
+Do not retrofit every V1/V2 endpoint with new codes during V3.
+
+### 10.2 V3 validation policy
+
+For new V3 endpoints:
+
+- trim/normalize fields before validation where specified;
+- reject missing or invalid required fields with `400` and V2 `{ message, errors }` shape;
+- reject unknown body fields according to V2 shared validation policy;
+- never return stack traces, provider responses, hashes, transaction internals, or raw database errors;
+- frontend must present understandable messages and not rely solely on code strings.
+
+### 10.3 Machine-readable V3 error extension
+
+V3 endpoints may add a `code` while retaining the V2 human-readable `message`:
+
+```json
+{
+  "message": "Human-readable error",
+  "code": "MACHINE_READABLE_CODE"
+}
+```
+
+This is an extension for new V3 endpoint errors, not a replacement for existing V2 shapes.
+
+Canonical V3 errors:
+
+| Endpoint/condition | Status | Code | Public message intent |
+|---|---:|---|---|
+| Forgot-password rate limit | 429 | `RESET_RATE_LIMITED` | Too many requests; try later |
+| Reset token malformed/not found/used/expired | 400 | `INVALID_TOKEN` | Link invalid or expired |
+| New password below policy | 400 | validation shape or `WEAK_PASSWORD` | Password must meet existing policy |
+| Reset transaction unavailable | 503 | `RESET_UNAVAILABLE` | Reset temporarily unavailable |
+| Delete wrong current password | 401 | `INVALID_PASSWORD` | Current password is incorrect |
+| Delete transaction unavailable | 503 | `DELETE_UNAVAILABLE` | Account deletion temporarily unavailable |
+
+V3 deliberately uses the same `INVALID_TOKEN` contract for malformed, missing, used, and expired reset tokens. The frontend and public API do not need to reveal which internal condition occurred.
+
+Unexpected errors use the existing server-error middleware contract and must not expose internals.
+
+### 10.4 API prefix and routing
+
+All endpoint paths in this document are relative to the existing configured API base prefix (for example `/api/v1`). V3 must mount new routes consistently with current route composition rather than creating an unversioned parallel API.
+
+---
+
+## 11. Security and Transaction Rules
+
+### 11.1 Transaction boundary
+
+- Obtain sessions only from the shared MongoClient lifecycle.
+- Pass the same `{ session }` to every repository operation in one transaction.
+- Keep controllers unaware of MongoDB transaction mechanics.
+- Always end sessions in `finally`.
+- Do not perform email/network side effects inside retryable transaction callbacks.
+- No silent non-atomic fallback for reset consumption or account deletion.
+
+### 11.2 Testing environments
+
+- Mocked transaction tests prove orchestration only.
+- Standalone MongoDB does not prove replica-set transactions.
+- Real replica-set evidence is required for V3-10 and V3-12 merge recommendations.
+- If the necessary environment is unavailable, report `SKIPPED` and follow the human hard-gate policy in `v3-tasks.md`; never report a mock as real transaction evidence.
+
+### 11.3 Enumeration and logging
+
+- Existing/non-existing forgot-password accounts share normal status/body.
+- Rate-limit policy is applied before account-existence-dependent behavior.
+- Operational logs use sanitized identifiers/events, not raw email or token.
+- Response timing need only avoid an obvious branch difference; V3 does not claim cryptographic timing indistinguishability.
+
+---
+
+## 12. Verification and Acceptance
+
+### 12.1 Query layer
+
+- [ ] Exactly one Query Client provider exists.
+- [ ] Auth state remains outside TanStack Query.
+- [ ] Applications list/detail/events/dashboard use defined keys and API modules.
+- [ ] Search/filter/sort retain V2 behavior and stable keys.
+- [ ] Every mutation performs the required invalidation.
+- [ ] Deleted application detail/events are removed from cache.
+- [ ] Logout, unauthorized invalidation, and successful account deletion clear private cache.
+- [ ] Initial pending, background refetch, empty, filtered-empty, error, and mutation states are distinct.
+
+### 12.2 Password reset
+
+- [ ] Existing and non-existing accounts receive the same normal forgot-password status/body.
+- [ ] Malformed email uses V2 validation shape.
+- [ ] Email/IP rate limits and `429` contract work.
+- [ ] A second reset request invalidates the first token.
+- [ ] TTL cleanup is not used as validity proof.
+- [ ] Provider failure leaves no usable new token and does not enumerate the account.
+- [ ] Raw email/token is absent from normal logs/evidence.
+- [ ] Valid reset succeeds once and updates the password.
+- [ ] Concurrent use of one token cannot succeed twice.
+- [ ] Expired/invalid/used tokens produce safe errors.
+- [ ] Old JWT is rejected after successful reset.
+- [ ] Reset does not auto-login.
+
+### 12.3 Account deletion
+
+- [ ] Endpoint uses authenticated identity and accepts no user ID.
+- [ ] Wrong password deletes nothing and keeps frontend session.
+- [ ] Successful transaction deletes events, applications, reset tokens, and user.
+- [ ] Forced mid-cascade failure rolls back all deletion.
+- [ ] Unsupported transaction returns `503` with no fallback.
+- [ ] Deleted JWT no longer authenticates.
+- [ ] Successful frontend flow clears Auth/private query cache.
+- [ ] Browser Back cannot reveal private cached content.
+- [ ] Accepted concurrent-mutation limitation is documented accurately.
+
+### 12.4 Visual/accessibility
+
+- [ ] Design tokens are applied without mechanical layout rewrite.
+- [ ] Auth sample data is labeled and inert.
+- [ ] Login/Register/reset behavior remains functional.
+- [ ] Reduced-motion disables non-essential motion.
+- [ ] Parallax is disabled on touch/coarse pointer.
+- [ ] Skeletons match layouts and are accessible.
+- [ ] Background refetch does not flash a full-page skeleton.
+- [ ] Forms/modal work by keyboard at desktop and mobile widths.
+- [ ] Filtering/sorting 20–50 disposable applications causes no layout shift or reorder animation.
+
+### 12.5 Regression baseline
+
+- [ ] Existing backend attention/hardening checks pass.
+- [ ] Existing backend E2E passes when its environment is available.
+- [ ] Frontend clean install/build passes.
+- [ ] Existing login/register/me/logout and protected routes regress cleanly.
+- [ ] Existing application/event/dashboard/attention contracts remain unchanged.
+- [ ] Cross-user private resources still return the V2 privacy behavior.
+- [ ] Test evidence separates CI, local automation, mocks, replica set, source inspection, and browser QA.
+
+---
+
+## 13. V3 Completion Rule
+
+V3 is complete only when:
+
+1. all tasks in `docs/v3-tasks.md` are completed in dependency order;
+2. human-approval hard gates are respected;
+3. no critical V3 acceptance criterion is silently skipped;
+4. V1/V2 regression behavior is preserved;
+5. architecture/README/environment documentation matches the merged implementation;
+6. final regression records exact `PASS`, `FAIL`, and `SKIPPED` evidence;
+7. V3-18 returns `READY` with no release blocker.
+
+V3 does not claim production-scale abuse protection, distributed rate limiting, perfect deletion/mutation concurrency prevention, or validated product-market fit.
