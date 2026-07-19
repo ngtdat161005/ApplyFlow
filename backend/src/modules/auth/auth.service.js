@@ -32,6 +32,10 @@ function isDuplicateKeyError(error) {
   return error?.code === 11000;
 }
 
+export function hashPassword(password) {
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+}
+
 export async function registerUser(payload) {
   const existingUser = await findUserByEmail(payload.email);
 
@@ -40,7 +44,7 @@ export async function registerUser(payload) {
   }
 
   const now = new Date();
-  const passwordHash = await bcrypt.hash(payload.password, BCRYPT_SALT_ROUNDS);
+  const passwordHash = await hashPassword(payload.password);
 
   try {
     const user = await createUser({

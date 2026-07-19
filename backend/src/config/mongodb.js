@@ -26,6 +26,31 @@ export function getDb() {
   return db;
 }
 
+export function getMongoClient() {
+  if (!client || !db) {
+    throw new Error("MongoDB has not been connected. Call connectToMongo() before starting a session.");
+  }
+
+  return client;
+}
+
+export function createMongoTransactionRunner(clientProvider = getMongoClient) {
+  return async function runTransaction(work) {
+    const session = clientProvider().startSession();
+
+    try {
+      return await session.withTransaction(() => work(session), {
+        readConcern: { level: "snapshot" },
+        writeConcern: { w: "majority" },
+      });
+    } finally {
+      await session.endSession();
+    }
+  };
+}
+
+export const runMongoTransaction = createMongoTransactionRunner();
+
 export async function closeMongoConnection() {
   if (client) {
     await client.close();

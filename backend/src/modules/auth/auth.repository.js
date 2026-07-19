@@ -35,3 +35,19 @@ export async function createUser(user) {
     ...user,
   };
 }
+
+export async function updateUserPasswordForReset(userId, passwordHash, updatedAt, { session }) {
+  const result = await getUsersCollection().updateOne(
+    { _id: userId },
+    {
+      $set: {
+        passwordHash,
+        updatedAt,
+      },
+      $inc: { tokenVersion: 1 },
+    },
+    { session },
+  );
+
+  return result.matchedCount === 1;
+}

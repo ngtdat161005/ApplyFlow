@@ -84,3 +84,26 @@ export function validateForgotPasswordPayload(payload) {
     errors,
   };
 }
+
+export function validateResetPasswordPayload(payload) {
+  const token = typeof payload.token === "string" ? payload.token : "";
+  const newPassword = typeof payload.newPassword === "string" ? payload.newPassword : "";
+  const errors = {};
+  const allowedFields = new Set(["token", "newPassword"]);
+  const unknownFields = Object.keys(payload).filter((fieldName) => !allowedFields.has(fieldName));
+
+  if (unknownFields.length > 0) {
+    errors.body = `Unsupported field(s): ${unknownFields.join(", ")}`;
+  }
+
+  if (!newPassword) {
+    errors.newPassword = "Password is required";
+  } else if (newPassword.length < 8) {
+    errors.newPassword = "Password must be at least 8 characters";
+  }
+
+  return {
+    value: { token, newPassword },
+    errors,
+  };
+}
