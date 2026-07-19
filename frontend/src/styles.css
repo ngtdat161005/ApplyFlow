@@ -279,6 +279,18 @@ textarea:disabled {
   margin: 0;
 }
 
+.auth-form-link {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(var(--space-2) * -1);
+}
+
+.auth-form-link a {
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
 .auth-alert,
 .auth-success {
   border-radius: var(--radius-base);
@@ -304,6 +316,12 @@ textarea:disabled {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   color: var(--color-success);
+}
+
+.auth-alert:focus,
+.auth-success:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .text-link {
