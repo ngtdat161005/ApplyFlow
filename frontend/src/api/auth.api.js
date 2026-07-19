@@ -19,3 +19,19 @@ export function login(payload) {
 export function getCurrentUser() {
   return httpRequest('/auth/me');
 }
+
+export function requestPasswordReset(payload) {
+  return httpRequest('/auth/forgot-password', {
+    method: 'POST',
+    body: payload,
+    auth: false,
+  });
+}
+
+export function resetPassword(payload) {
+  return httpRequest('/auth/reset-password', {
+    method: 'POST',
+    body: payload,
+    auth: false,
+  });
+}

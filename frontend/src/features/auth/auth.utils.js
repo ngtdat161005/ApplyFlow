@@ -80,3 +80,7 @@ export function getErrorFieldErrors(error) {
     return fieldErrors;
   }, {});
 }
+
+export function getErrorCode(error) {
+  return typeof error?.response?.code === 'string' ? error.response.code : '';
+}

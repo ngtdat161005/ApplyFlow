@@ -136,6 +136,9 @@ export default function LoginPage() {
             />
             {fieldErrors.password ? <span className="field-error">{fieldErrors.password}</span> : null}
           </label>
+          <div className="auth-form-link">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </div>
           <button disabled={isSubmitting} type="submit">
             {isSubmitting ? 'Logging in...' : 'Login'}
           </button>
