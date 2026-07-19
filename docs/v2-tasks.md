@@ -22,7 +22,7 @@ This plan is designed to:
 Every V2 task must respect these documents:
 
 1. `docs/v2-spec.md`
-2. `docs/ApplyFlow Specification.md`
+2. `docs/v1-spec.md`
 3. `docs/ApplyFlow Architecture.md`
 4. `docs/test-plan.md`
 5. `docs/regression-checklist.md`
@@ -32,7 +32,7 @@ Every V2 task must respect these documents:
 If documents conflict:
 
 1. `docs/v2-spec.md` defines V2 behavior and V2 constraints.
-2. `docs/ApplyFlow Specification.md` defines the V1 product/domain baseline.
+2. `docs/v1-spec.md` defines the V1 product/domain baseline.
 3. `docs/ApplyFlow Architecture.md` defines the V1 architecture baseline.
 4. `docs/v2-tasks.md` defines execution order and per-task scope.
 5. `AGENTS.md` and Codex skills define AI workflow rules.
@@ -435,7 +435,7 @@ Read these documents first:
 - .codex/skills/applyflow-test-designer/SKILL.md
 - docs/v2-spec.md
 - docs/v2-tasks.md
-- docs/ApplyFlow Specification.md
+- docs/v1-spec.md
 - docs/ApplyFlow Architecture.md
 - docs/test-plan.md
 - docs/regression-checklist.md
