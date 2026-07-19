@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
 
 process.env.NODE_ENV ||= "development";
@@ -83,9 +84,8 @@ async function runAuthMiddleware(headers = {}) {
     },
   };
 
-  let nextError;
-  requireAuth(request, {}, (error) => {
-    nextError = error;
+  const nextError = await new Promise((resolve, reject) => {
+    Promise.resolve(requireAuth(request, {}, resolve)).catch(reject);
   });
 
   return {
@@ -998,6 +998,24 @@ async function checkAuthMiddleware() {
   assert.equal(invalidToken.error.statusCode, 401);
   assert.equal(invalidToken.error.message, "Invalid authorization token");
   assert.equal(invalidToken.request.user, undefined);
+
+  for (const tokenVersion of [-1, "0"]) {
+    const token = jwt.sign(
+      {
+        sub: VALID_USER_ID,
+        tokenVersion,
+      },
+      process.env.JWT_SECRET,
+    );
+    const invalidVersion = await runAuthMiddleware({
+      authorization: `Bearer ${token}`,
+    });
+
+    assert.ok(invalidVersion.error instanceof UnauthorizedError);
+    assert.equal(invalidVersion.error.statusCode, 401);
+    assert.equal(invalidVersion.error.message, "Invalid authorization token");
+    assert.equal(invalidVersion.request.user, undefined);
+  }
 }
 
 function checkProductionErrorMiddleware() {

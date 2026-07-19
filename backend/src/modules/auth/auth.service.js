@@ -4,14 +4,22 @@ import { config } from "../../config/env.js";
 import { ConflictError, UnauthorizedError } from "../../domain/shared/domain-errors.js";
 import { createUser, findUserByEmail, findUserById } from "./auth.repository.js";
 import { mapUserToSafeUser } from "./auth.mapper.js";
+import { DEFAULT_TOKEN_VERSION, normalizeTokenVersion } from "./auth.token-version.js";
 
 const BCRYPT_SALT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRES_IN = "1d";
 
 function createAccessToken(user) {
+  const tokenVersion = normalizeTokenVersion(user.tokenVersion);
+
+  if (tokenVersion === null) {
+    throw new Error("User has an invalid token version");
+  }
+
   return jwt.sign(
     {
       sub: user._id.toString(),
+      tokenVersion,
     },
     config.jwtSecret,
     {
@@ -39,6 +47,7 @@ export async function registerUser(payload) {
       displayName: payload.displayName,
       email: payload.email,
       passwordHash,
+      tokenVersion: DEFAULT_TOKEN_VERSION,
       createdAt: now,
       updatedAt: now,
     });
@@ -80,4 +89,24 @@ export async function getCurrentUser(userId) {
   }
 
   return mapUserToSafeUser(user);
+}
+
+export async function validateAuthenticatedSession(userId, payloadTokenVersion) {
+  const tokenVersion = normalizeTokenVersion(payloadTokenVersion);
+
+  if (tokenVersion === null) {
+    throw new UnauthorizedError("Invalid authorization token");
+  }
+
+  const user = await findUserById(userId);
+
+  if (!user) {
+    throw new UnauthorizedError("Authenticated user no longer exists");
+  }
+
+  const storedTokenVersion = normalizeTokenVersion(user.tokenVersion);
+
+  if (storedTokenVersion === null || storedTokenVersion !== tokenVersion) {
+    throw new UnauthorizedError("Invalid authorization token");
+  }
 }

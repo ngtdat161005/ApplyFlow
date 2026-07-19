@@ -1,3 +1,12 @@
+import dns from "node:dns";
+import jwt from "jsonwebtoken";
+import { ObjectId } from "mongodb";
+import { config } from "../src/config/env.js";
+import { closeMongoConnection, connectToMongo } from "../src/config/mongodb.js";
+import { getUsersCollection } from "../src/db/collections.js";
+
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
+
 const DEFAULT_ORIGIN = "http://127.0.0.1:4000";
 const API_ORIGIN = (process.env.APPLYFLOW_BACKEND_ORIGIN || DEFAULT_ORIGIN).replace(/\/+$/, "");
 const RUN_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -127,6 +136,7 @@ async function createTestUser(label) {
   const registerResponse = await request("POST", "/auth/register", { body: user });
   assertStatus(registerResponse, 201, `${label} register`);
   assert(registerResponse.body?.user?.email === user.email, `${label} register should return user`);
+  assertSafeUser(registerResponse.body?.user, `${label} register`);
 
   const loginResponse = await request("POST", "/auth/login", {
     body: {
@@ -136,6 +146,7 @@ async function createTestUser(label) {
   });
   assertStatus(loginResponse, 200, `${label} login`);
   assert(loginResponse.body?.accessToken, `${label} login should return an access token`);
+  assertSafeUser(loginResponse.body?.user, `${label} login`);
 
   return {
     ...user,
@@ -220,8 +231,122 @@ function assertExactKeys(value, expectedKeys, label) {
   );
 }
 
+function assertSafeUser(user, label) {
+  assert(user && typeof user === "object", `${label} should return a user`);
+  assert(!("passwordHash" in user), `${label} must not expose passwordHash`);
+  assert(!("tokenVersion" in user), `${label} must not expose tokenVersion`);
+}
+
+function createSessionToken(userId, tokenVersion) {
+  const payload = { sub: userId };
+
+  if (tokenVersion !== undefined) {
+    payload.tokenVersion = tokenVersion;
+  }
+
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: "1d" });
+}
+
+async function checkTokenVersionContract(primaryUser) {
+  const userId = new ObjectId(primaryUser.userId);
+  const users = getUsersCollection();
+  const registeredUser = await users.findOne({
+    _id: userId,
+    email: primaryUser.email,
+  });
+
+  assert(registeredUser?.tokenVersion === 0, "new users should store tokenVersion 0");
+
+  const issuedPayload = jwt.verify(primaryUser.token, config.jwtSecret);
+  assert(
+    typeof issuedPayload.tokenVersion === "number" && issuedPayload.tokenVersion === 0,
+    "login should issue numeric tokenVersion 0",
+  );
+
+  const unsetResult = await users.updateOne(
+    { _id: userId, email: primaryUser.email },
+    { $unset: { tokenVersion: "" } },
+  );
+  assert(unsetResult.matchedCount === 1, "legacy-user setup should match the disposable user");
+
+  const currentTokenForLegacyUser = await request("GET", "/auth/me", {
+    token: primaryUser.token,
+  });
+  assertStatus(currentTokenForLegacyUser, 200, "current token for user missing tokenVersion");
+
+  const legacyToken = createSessionToken(primaryUser.userId);
+  const legacyTokenResponse = await request("GET", "/auth/me", { token: legacyToken });
+  assertStatus(legacyTokenResponse, 200, "legacy token and user missing tokenVersion");
+
+  for (const tokenVersion of [-1, "0"]) {
+    const invalidVersionResponse = await request("GET", "/auth/me", {
+      token: createSessionToken(primaryUser.userId, tokenVersion),
+    });
+    assertStatus(invalidVersionResponse, 401, `invalid tokenVersion ${JSON.stringify(tokenVersion)}`);
+    assertControlledError(
+      invalidVersionResponse,
+      `invalid tokenVersion ${JSON.stringify(tokenVersion)}`,
+    );
+  }
+
+  const missingUserResponse = await request("GET", "/auth/me", {
+    token: createSessionToken(new ObjectId().toString(), 0),
+  });
+  assertStatus(missingUserResponse, 401, "session for missing user");
+  assertControlledError(missingUserResponse, "session for missing user");
+
+  const incrementResult = await users.updateOne(
+    { _id: userId, email: primaryUser.email },
+    { $set: { tokenVersion: 1 } },
+  );
+  assert(incrementResult.matchedCount === 1, "version-mismatch setup should match the disposable user");
+
+  const protectedRoutes = [
+    ["GET", "/auth/me"],
+    ["POST", "/applications"],
+    ["GET", "/applications"],
+    ["GET", "/applications/000000000000000000000000"],
+    ["PATCH", "/applications/000000000000000000000000"],
+    ["DELETE", "/applications/000000000000000000000000"],
+    ["POST", "/applications/000000000000000000000000/events"],
+    ["GET", "/applications/000000000000000000000000/events"],
+    ["PATCH", "/applications/000000000000000000000000/events/000000000000000000000000"],
+    ["DELETE", "/applications/000000000000000000000000/events/000000000000000000000000"],
+    ["GET", "/dashboard/summary"],
+  ];
+
+  for (const [method, path] of protectedRoutes) {
+    const mismatchResponse = await request(method, path, { token: primaryUser.token });
+    assertStatus(mismatchResponse, 401, `tokenVersion mismatch on ${method} ${path}`);
+    assertControlledError(mismatchResponse, `tokenVersion mismatch on ${method} ${path}`);
+  }
+
+  const refreshedLogin = await request("POST", "/auth/login", {
+    body: {
+      email: primaryUser.email,
+      password: primaryUser.password,
+    },
+  });
+  assertStatus(refreshedLogin, 200, "login after tokenVersion increment");
+  assertSafeUser(refreshedLogin.body?.user, "login after tokenVersion increment");
+
+  const refreshedPayload = jwt.verify(refreshedLogin.body.accessToken, config.jwtSecret);
+  assert(refreshedPayload.tokenVersion === 1, "new login should issue current tokenVersion 1");
+
+  const refreshedMe = await request("GET", "/auth/me", {
+    token: refreshedLogin.body.accessToken,
+  });
+  assertStatus(refreshedMe, 200, "auth me with current tokenVersion");
+  assertSafeUser(refreshedMe.body?.user, "auth me with current tokenVersion");
+
+  console.log("PASS tokenVersion issuance, migration compatibility, and protected-route invalidation");
+  return refreshedLogin.body.accessToken;
+}
+
 async function main() {
   console.log(`ApplyFlow backend E2E checks against ${API_ORIGIN}`);
+
+  await connectToMongo();
 
   const healthResponse = await request("GET", "/health");
   assertStatus(healthResponse, 200, "health check");
@@ -233,7 +358,7 @@ async function main() {
   console.log("PASS health check");
 
   const primaryUser = await createTestUser("primary");
-  primaryToken = primaryUser.token;
+  primaryToken = await checkTokenVersionContract(primaryUser);
 
   const missingTokenResponse = await request("GET", "/auth/me");
   assertStatus(missingTokenResponse, 401, "auth me without token");
@@ -254,6 +379,7 @@ async function main() {
   const meResponse = await request("GET", "/auth/me", { token: primaryToken });
   assertStatus(meResponse, 200, "auth me");
   assert(meResponse.body?.user?.email === primaryUser.email, "auth me should return current user");
+  assertSafeUser(meResponse.body?.user, "auth me");
   console.log("PASS auth register/login/me and authorization errors");
 
   const badLoginResponse = await request("POST", "/auth/login", {
@@ -1298,6 +1424,8 @@ try {
   for (const cleanupFailure of cleanupFailures) {
     console.error(`FAIL cleanup ${cleanupFailure}`);
   }
+
+  await closeMongoConnection();
 
   console.log(
     "INFO successful disposable user registrations remain in the configured test database " +
