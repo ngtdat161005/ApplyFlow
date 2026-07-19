@@ -1,6 +1,6 @@
 # ApplyFlow V2 Test Evidence
 
-This document records what was actually verified for ApplyFlow V2, what each check proves, and what remains limited. It complements the [test plan](test-plan.md) and the [canonical frontend manual regression checklist](../frontend/docs/manual-frontend-testcases.md).
+This document records what was actually verified for ApplyFlow V2, what each check proves, and what remains limited. It complements the [test plan](test-plan.md), the [canonical frontend manual regression checklist](../frontend/docs/manual-frontend-testcases.md), and the separate [final V2 regression audit](v2-final-regression.md).
 
 ## 1. Evidence Metadata
 
