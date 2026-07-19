@@ -12,11 +12,20 @@ const { config } = await import("../src/config/env.js");
 const { closeMongoConnection, connectToMongo, getMongoClient } = await import(
   "../src/config/mongodb.js"
 );
-const { getPasswordResetTokensCollection, getUsersCollection } = await import(
-  "../src/db/collections.js"
-);
+const {
+  getApplicationEventsCollection,
+  getApplicationsCollection,
+  getPasswordResetTokensCollection,
+  getUsersCollection,
+} = await import("../src/db/collections.js");
 const { hashPasswordResetToken } = await import(
   "../src/modules/auth/password-reset-token.js"
+);
+const { deleteApplicationsByUser } = await import(
+  "../src/modules/application/application.repository.js"
+);
+const { createAccountDeleter } = await import(
+  "../src/modules/user/account-deletion.service.js"
 );
 
 const DEFAULT_ORIGIN = "http://127.0.0.1:4000";
@@ -553,6 +562,190 @@ async function checkResetPasswordContract() {
 
   console.log(
     "PASS real replica-set password reset commit, rollback, expiry, session invalidation, and concurrency",
+  );
+}
+
+async function getOwnedDataCounts(userId) {
+  const objectUserId = new ObjectId(userId);
+  const [events, applications, resetTokens, users] = await Promise.all([
+    getApplicationEventsCollection().countDocuments({ userId: objectUserId }),
+    getApplicationsCollection().countDocuments({ userId: objectUserId }),
+    getPasswordResetTokensCollection().countDocuments({ userId: objectUserId }),
+    getUsersCollection().countDocuments({ _id: objectUserId }),
+  ]);
+
+  return { events, applications, resetTokens, users };
+}
+
+function assertOwnedDataCounts(actual, expected, label) {
+  for (const [category, expectedCount] of Object.entries(expected)) {
+    assert(
+      actual[category] === expectedCount,
+      `${label} expected ${expectedCount} ${category}, got ${actual[category]}`,
+    );
+  }
+}
+
+async function createAccountDeletionFixtures(user, label) {
+  const applicationResponse = await request("POST", "/applications", {
+    token: user.token,
+    body: applicationPayload({
+      company: `${RUN_MARKER} ${label}`,
+      role: `${RUN_MARKER} deletion fixture`,
+    }),
+  });
+  assertStatus(applicationResponse, 201, `${label} create application`);
+  const applicationId = applicationResponse.body?.application?._id;
+  assert(applicationId, `${label} should create an application`);
+  createdApplications.push({ token: user.token, applicationId });
+
+  const eventResponse = await request("POST", `/applications/${applicationId}/events`, {
+    token: user.token,
+    body: {
+      type: "note",
+      title: `${RUN_MARKER} ${label} event`,
+    },
+  });
+  assertStatus(eventResponse, 201, `${label} create event`);
+
+  await storeResetToken(
+    user.userId,
+    createRuntimeResetToken(),
+    new Date(Date.now() + 30 * 60_000),
+  );
+
+  return applicationId;
+}
+
+async function checkAccountDeletionContract() {
+  const hello = await getMongoClient().db(config.mongodb.dbName).admin().command({ hello: 1 });
+  assert(Boolean(hello.setName), "account deletion evidence requires a real replica set");
+  assert(
+    Number.isFinite(hello.logicalSessionTimeoutMinutes),
+    "account deletion evidence requires logical sessions",
+  );
+
+  const deletionUser = await createTestUser("delete-account");
+  const protectedUser = await createTestUser("delete-account-protected");
+  const deletionApplicationId = await createAccountDeletionFixtures(
+    deletionUser,
+    "delete account",
+  );
+  const beforeWrongPassword = await getOwnedDataCounts(deletionUser.userId);
+  assertOwnedDataCounts(
+    beforeWrongPassword,
+    { events: 1, applications: 1, resetTokens: 1, users: 1 },
+    "delete fixture",
+  );
+
+  const missingPasswordResponse = await request("DELETE", "/users/me", {
+    token: deletionUser.token,
+    body: {},
+  });
+  assertStatus(missingPasswordResponse, 400, "delete account missing password");
+  assertValidationError(missingPasswordResponse, "password", "delete account missing password");
+
+  const crossUserBodyResponse = await request("DELETE", "/users/me", {
+    token: deletionUser.token,
+    body: {
+      password: deletionUser.password,
+      userId: protectedUser.userId,
+    },
+  });
+  assertStatus(crossUserBodyResponse, 400, "delete account userId body rejected");
+  assertValidationError(crossUserBodyResponse, "body", "delete account userId body rejected");
+
+  const wrongPasswordResponse = await request("DELETE", "/users/me", {
+    token: deletionUser.token,
+    body: { password: "wrong-password" },
+  });
+  assertV3Error(
+    wrongPasswordResponse,
+    401,
+    "INVALID_PASSWORD",
+    "delete account wrong password",
+  );
+  assertOwnedDataCounts(
+    await getOwnedDataCounts(deletionUser.userId),
+    beforeWrongPassword,
+    "wrong-password rollback",
+  );
+  const protectedUserBeforeDelete = await request("GET", "/auth/me", {
+    token: protectedUser.token,
+  });
+  assertStatus(protectedUserBeforeDelete, 200, "protected user before other account deletion");
+
+  const deletionResponse = await request("DELETE", "/users/me", {
+    token: deletionUser.token,
+    body: { password: deletionUser.password },
+  });
+  assertStatus(deletionResponse, 200, "delete account success");
+  assertExactKeys(deletionResponse.body, ["message"], "delete account success response");
+  assert(
+    deletionResponse.body.message === "Account deleted.",
+    "delete account should return exact success response",
+  );
+  forgetCreatedApplication(deletionApplicationId);
+  assertOwnedDataCounts(
+    await getOwnedDataCounts(deletionUser.userId),
+    { events: 0, applications: 0, resetTokens: 0, users: 0 },
+    "successful account deletion",
+  );
+
+  const deletedJwtResponse = await request("GET", "/auth/me", {
+    token: deletionUser.token,
+  });
+  assertStatus(deletedJwtResponse, 401, "deleted account JWT");
+  const protectedUserAfterDelete = await request("GET", "/auth/me", {
+    token: protectedUser.token,
+  });
+  assertStatus(protectedUserAfterDelete, 200, "protected user after other account deletion");
+
+  const protectedUserDeleteResponse = await request("DELETE", "/users/me", {
+    token: protectedUser.token,
+    body: { password: protectedUser.password },
+  });
+  assertStatus(protectedUserDeleteResponse, 200, "protected fixture cleanup");
+
+  const rollbackUser = await createTestUser("delete-account-rollback");
+  const rollbackApplicationId = await createAccountDeletionFixtures(
+    rollbackUser,
+    "delete rollback",
+  );
+  const rollbackCounts = await getOwnedDataCounts(rollbackUser.userId);
+  const forceMidCascadeFailure = createAccountDeleter({
+    deleteApplications: async (userId, options) => {
+      await deleteApplicationsByUser(userId, options);
+      throw new Error("forced account deletion rollback");
+    },
+  });
+  let rollbackError = null;
+
+  try {
+    await forceMidCascadeFailure(rollbackUser.userId, rollbackUser.password);
+  } catch (error) {
+    rollbackError = error;
+  }
+
+  assert(
+    rollbackError?.message === "forced account deletion rollback",
+    "forced mid-cascade failure should escape without fallback",
+  );
+  assertOwnedDataCounts(
+    await getOwnedDataCounts(rollbackUser.userId),
+    rollbackCounts,
+    "real transaction mid-cascade rollback",
+  );
+
+  const rollbackCleanupResponse = await request("DELETE", "/users/me", {
+    token: rollbackUser.token,
+    body: { password: rollbackUser.password },
+  });
+  assertStatus(rollbackCleanupResponse, 200, "rollback fixture cleanup");
+  forgetCreatedApplication(rollbackApplicationId);
+
+  console.log(
+    "PASS real replica-set account deletion commit, mid-cascade rollback, ownership, and JWT invalidation",
   );
 }
 
@@ -1723,6 +1916,7 @@ async function main() {
   console.log("PASS user-scoped delete cascade");
   await checkForgotPasswordIpRateLimit();
   await checkResetPasswordContract();
+  await checkAccountDeletionContract();
 }
 
 let mainError = null;
@@ -1757,10 +1951,7 @@ try {
 
   await closeMongoConnection();
 
-  console.log(
-    "INFO successful disposable user registrations remain in the configured test database " +
-      "because ApplyFlow has no user-delete endpoint.",
-  );
+  console.log("INFO successful disposable users outside account-deletion fixtures remain in test data");
 
   if (mainError || cleanupFailures.length > 0) {
     process.exitCode = 1;

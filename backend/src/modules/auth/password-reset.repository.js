@@ -52,14 +52,17 @@ export async function deletePasswordResetTokenById(tokenId) {
   return result.deletedCount === 1;
 }
 
-export async function deletePasswordResetTokensByUserId(userId) {
+export async function deletePasswordResetTokensByUserId(userId, options = {}) {
   const _id = toObjectId(userId);
 
   if (!_id) {
     return 0;
   }
 
-  const result = await getPasswordResetTokensCollection().deleteMany({ userId: _id });
+  const result = await getPasswordResetTokensCollection().deleteMany(
+    { userId: _id },
+    options,
+  );
   return result.deletedCount;
 }
 

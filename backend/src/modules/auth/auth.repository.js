@@ -51,3 +51,12 @@ export async function updateUserPasswordForReset(userId, passwordHash, updatedAt
 
   return result.matchedCount === 1;
 }
+
+export async function deleteUserById(userId, { session }) {
+  const result = await getUsersCollection().deleteOne(
+    { _id: userId },
+    { session },
+  );
+
+  return result.deletedCount === 1;
+}

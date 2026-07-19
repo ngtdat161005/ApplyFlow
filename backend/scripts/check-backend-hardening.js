@@ -69,6 +69,15 @@ const { createRawPasswordResetToken, hashPasswordResetToken } = await import(
   "../src/modules/auth/password-reset-token.js"
 );
 const { createMongoTransactionRunner } = await import("../src/config/mongodb.js");
+const { createAccountDeleter } = await import(
+  "../src/modules/user/account-deletion.service.js"
+);
+const { DeleteUnavailableError, InvalidPasswordError } = await import(
+  "../src/modules/user/account-deletion.errors.js"
+);
+const { validateDeleteAccountPayload } = await import(
+  "../src/modules/user/user.validator.js"
+);
 const { createApp } = await import("../src/app.js");
 
 const VALID_USER_ID = "0123456789abcdef01234567";
@@ -1414,6 +1423,114 @@ async function checkMongoTransactionRunner() {
   });
 }
 
+function checkDeleteAccountValidation() {
+  assert.deepEqual(validateDeleteAccountPayload({ password: "current-password" }), {
+    value: { password: "current-password" },
+    errors: {},
+  });
+  assert.deepEqual(validateDeleteAccountPayload({}).errors, {
+    password: "Password is required",
+  });
+  assert.deepEqual(
+    validateDeleteAccountPayload({
+      password: "current-password",
+      userId: VALID_USER_ID,
+    }).errors,
+    { body: "Unsupported field(s): userId" },
+  );
+}
+
+async function checkAccountDeletionOrchestration() {
+  const userId = new ObjectId();
+  const user = { _id: userId, passwordHash: "stored-password-hash" };
+  const session = { id: "account-delete-session" };
+  const calls = [];
+  const deleteAccount = createAccountDeleter({
+    findUser: async (authenticatedUserId) => {
+      calls.push(["find-user", authenticatedUserId]);
+      return user;
+    },
+    verifyPassword: async (password, passwordHash) => {
+      calls.push(["verify-password", password, passwordHash]);
+      return true;
+    },
+    runTransaction: async (work) => {
+      calls.push(["transaction"]);
+      return work(session);
+    },
+    deleteEvents: async (currentUserId, options) => {
+      calls.push(["delete-events", currentUserId, options.session]);
+    },
+    deleteApplications: async (currentUserId, options) => {
+      calls.push(["delete-applications", currentUserId, options.session]);
+    },
+    deleteResetTokens: async (currentUserId, options) => {
+      calls.push(["delete-reset-tokens", currentUserId, options.session]);
+    },
+    deleteUser: async (currentUserId, options) => {
+      calls.push(["delete-user", currentUserId, options.session]);
+      return true;
+    },
+  });
+
+  await deleteAccount(VALID_USER_ID, "current-password");
+  assert.deepEqual(calls, [
+    ["find-user", VALID_USER_ID],
+    ["verify-password", "current-password", "stored-password-hash"],
+    ["transaction"],
+    ["delete-events", userId, session],
+    ["delete-applications", userId, session],
+    ["delete-reset-tokens", userId, session],
+    ["delete-user", userId, session],
+  ]);
+
+  let wrongPasswordStartedTransaction = false;
+  const rejectWrongPassword = createAccountDeleter({
+    findUser: async () => user,
+    verifyPassword: async () => false,
+    runTransaction: async () => {
+      wrongPasswordStartedTransaction = true;
+    },
+  });
+  await assert.rejects(
+    () => rejectWrongPassword(VALID_USER_ID, "wrong-password"),
+    (error) =>
+      error instanceof InvalidPasswordError &&
+      error.statusCode === 401 &&
+      error.code === "INVALID_PASSWORD",
+  );
+  assert.equal(wrongPasswordStartedTransaction, false);
+
+  const unavailableError = new Error("private transaction detail");
+  unavailableError.code = 20;
+  const rejectUnavailableTransaction = createAccountDeleter({
+    findUser: async () => user,
+    verifyPassword: async () => true,
+    runTransaction: async () => {
+      throw unavailableError;
+    },
+  });
+  await assert.rejects(
+    () => rejectUnavailableTransaction(VALID_USER_ID, "current-password"),
+    (error) =>
+      error instanceof DeleteUnavailableError &&
+      error.statusCode === 503 &&
+      error.code === "DELETE_UNAVAILABLE" &&
+      !error.message.includes("private transaction detail"),
+  );
+
+  const rejectMissingUser = createAccountDeleter({
+    findUser: async () => null,
+    verifyPassword: async () => {
+      throw new Error("missing user password must not be compared");
+    },
+  });
+  await assert.rejects(
+    () => rejectMissingUser(VALID_USER_ID, "current-password"),
+    (error) => error instanceof UnauthorizedError && error.statusCode === 401,
+  );
+}
+
 function checkPasswordResetEnvironmentValidation() {
   const script = 'await import("./src/config/env.js");';
   const baseEnvironment = {
@@ -1479,6 +1596,9 @@ function checkProductionErrorMiddleware() {
     const { ResetUnavailableError } = await import(
       "./src/modules/auth/password-reset.errors.js"
     );
+    const { DeleteUnavailableError } = await import(
+      "./src/modules/user/account-deletion.errors.js"
+    );
     const createResponse = () => ({
       body: null,
       statusCode: null,
@@ -1499,7 +1619,13 @@ function checkProductionErrorMiddleware() {
     errorMiddleware(error, {}, unexpectedResponse, () => {});
     const unavailableResponse = createResponse();
     errorMiddleware(new ResetUnavailableError(), {}, unavailableResponse, () => {});
-    process.stdout.write(JSON.stringify({ unexpectedResponse, unavailableResponse }));
+    const deleteUnavailableResponse = createResponse();
+    errorMiddleware(new DeleteUnavailableError(), {}, deleteUnavailableResponse, () => {});
+    process.stdout.write(JSON.stringify({
+      unexpectedResponse,
+      unavailableResponse,
+      deleteUnavailableResponse,
+    }));
   `;
   const output = execFileSync(process.execPath, ["--input-type=module", "--eval", script], {
     cwd: process.cwd(),
@@ -1513,7 +1639,7 @@ function checkProductionErrorMiddleware() {
     },
     encoding: "utf8",
   });
-  const { unexpectedResponse, unavailableResponse } = JSON.parse(output);
+  const { deleteUnavailableResponse, unexpectedResponse, unavailableResponse } = JSON.parse(output);
 
   assert.equal(unexpectedResponse.statusCode, 500);
   assert.deepEqual(unexpectedResponse.body, {
@@ -1523,6 +1649,11 @@ function checkProductionErrorMiddleware() {
   assert.deepEqual(unavailableResponse.body, {
     message: "Password reset is temporarily unavailable. Please try again later.",
     code: "RESET_UNAVAILABLE",
+  });
+  assert.equal(deleteUnavailableResponse.statusCode, 503);
+  assert.deepEqual(deleteUnavailableResponse.body, {
+    message: "Account deletion is temporarily unavailable. Please try again later.",
+    code: "DELETE_UNAVAILABLE",
   });
 }
 
@@ -1601,6 +1732,8 @@ await checkPasswordResetService();
 checkResetPasswordValidation();
 await checkResetPasswordConsumption();
 await checkMongoTransactionRunner();
+checkDeleteAccountValidation();
+await checkAccountDeletionOrchestration();
 checkPasswordResetEnvironmentValidation();
 checkProductionErrorMiddleware();
 await checkServiceMalformedIdFallbacks();
