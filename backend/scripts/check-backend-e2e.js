@@ -1,11 +1,19 @@
 import dns from "node:dns";
 import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
-import { config } from "../src/config/env.js";
-import { closeMongoConnection, connectToMongo } from "../src/config/mongodb.js";
-import { getUsersCollection } from "../src/db/collections.js";
 
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
+process.env.NODE_ENV ||= "test";
+process.env.FRONTEND_ORIGIN ||= "http://localhost:5173";
+process.env.EMAIL_PROVIDER ||= "console";
+
+const { config } = await import("../src/config/env.js");
+const { closeMongoConnection, connectToMongo } = await import(
+  "../src/config/mongodb.js"
+);
+const { getPasswordResetTokensCollection, getUsersCollection } = await import(
+  "../src/db/collections.js"
+);
 
 const DEFAULT_ORIGIN = "http://127.0.0.1:4000";
 const API_ORIGIN = (process.env.APPLYFLOW_BACKEND_ORIGIN || DEFAULT_ORIGIN).replace(/\/+$/, "");
@@ -15,6 +23,8 @@ const LIST_SCOPE = `${RUN_MARKER} list`;
 const APPLICATION_STATUSES = ["saved", "applied", "in_process", "offer", "rejected", "withdrawn"];
 
 const createdApplications = [];
+const passwordResetUserIds = new Set();
+let forgotPasswordIpRequestCount = 0;
 let primaryToken = null;
 
 function assert(condition, message) {
@@ -81,7 +91,7 @@ function assertValidationError(response, fieldName, label) {
   );
 }
 
-async function request(method, path, { token, authorization, body } = {}) {
+async function request(method, path, { token, authorization, body, forwardedFor } = {}) {
   const headers = {};
 
   if (authorization !== undefined) {
@@ -92,6 +102,10 @@ async function request(method, path, { token, authorization, body } = {}) {
 
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
+  }
+
+  if (forwardedFor !== undefined) {
+    headers["X-Forwarded-For"] = forwardedFor;
   }
 
   let response;
@@ -124,6 +138,14 @@ async function request(method, path, { token, authorization, body } = {}) {
     body: responseBody,
     request: { method, path },
   };
+}
+
+async function requestForgotPassword(email, { forwardedFor } = {}) {
+  forgotPasswordIpRequestCount += 1;
+  return request("POST", "/auth/forgot-password", {
+    body: { email },
+    forwardedFor,
+  });
 }
 
 async function createTestUser(label) {
@@ -235,6 +257,120 @@ function assertSafeUser(user, label) {
   assert(user && typeof user === "object", `${label} should return a user`);
   assert(!("passwordHash" in user), `${label} must not expose passwordHash`);
   assert(!("tokenVersion" in user), `${label} must not expose tokenVersion`);
+}
+
+async function checkForgotPasswordContract(primaryUser) {
+  const genericMessage = "If an account with that email exists, a reset link has been sent.";
+  const userId = new ObjectId(primaryUser.userId);
+  const resetTokens = getPasswordResetTokensCollection();
+  passwordResetUserIds.add(primaryUser.userId);
+
+  const malformedEmail = await request("POST", "/auth/forgot-password", {
+    body: { email: "invalid" },
+  });
+  assertStatus(malformedEmail, 400, "forgot password malformed email");
+  assertValidationError(malformedEmail, "email", "forgot password malformed email");
+
+  const unknownField = await request("POST", "/auth/forgot-password", {
+    body: {
+      email: primaryUser.email,
+      userId: primaryUser.userId,
+    },
+  });
+  assertStatus(unknownField, 400, "forgot password unknown field");
+  assertValidationError(unknownField, "body", "forgot password unknown field");
+
+  const firstExistingResponse = await requestForgotPassword(primaryUser.email);
+  assertStatus(firstExistingResponse, 200, "forgot password existing account");
+  assertExactKeys(firstExistingResponse.body, ["message"], "forgot password success response");
+  assert(firstExistingResponse.body.message === genericMessage, "existing account generic response");
+
+  const firstTokens = await resetTokens.find({ userId }).toArray();
+  assert(firstTokens.length === 1, "first reset request should create exactly one token");
+  assertExactKeys(
+    firstTokens[0],
+    ["_id", "userId", "tokenHash", "expiresAt", "createdAt"],
+    "password reset token document",
+  );
+  assert(firstTokens[0].userId.equals(userId), "reset token should belong to current user");
+  assert(/^[a-f0-9]{64}$/.test(firstTokens[0].tokenHash), "reset token should store SHA-256 hex");
+  assert(firstTokens[0].expiresAt > firstTokens[0].createdAt, "reset token should expire later");
+
+  const secondExistingResponse = await requestForgotPassword(primaryUser.email);
+  assertStatus(secondExistingResponse, 200, "forgot password replacement request");
+  assert(
+    JSON.stringify(secondExistingResponse.body) === JSON.stringify(firstExistingResponse.body),
+    "replacement request should preserve the generic response",
+  );
+
+  const replacementTokens = await resetTokens.find({ userId }).toArray();
+  assert(replacementTokens.length === 1, "replacement should leave exactly one token");
+  assert(
+    !replacementTokens[0]._id.equals(firstTokens[0]._id),
+    "replacement should remove the previous token document",
+  );
+  assert(
+    replacementTokens[0].tokenHash !== firstTokens[0].tokenHash,
+    "replacement should invalidate the previous token hash",
+  );
+
+  const missingEmail = `applyflow-e2e-missing-${RUN_ID}@example.test`;
+  const missingResponse = await requestForgotPassword(missingEmail);
+  assertStatus(missingResponse, 200, "forgot password missing account");
+  assert(
+    JSON.stringify(missingResponse.body) === JSON.stringify(firstExistingResponse.body),
+    "existing and missing accounts should have identical public responses",
+  );
+
+  const rateLimitedEmail = `applyflow-e2e-rate-${RUN_ID}@example.test`;
+  for (let requestNumber = 1; requestNumber <= 5; requestNumber += 1) {
+    const submittedEmail =
+      requestNumber % 2 === 0 ? `  ${rateLimitedEmail.toUpperCase()}  ` : rateLimitedEmail;
+    const allowedResponse = await requestForgotPassword(submittedEmail);
+    assertStatus(allowedResponse, 200, `forgot password email limit request ${requestNumber}`);
+  }
+
+  const emailLimitedResponse = await requestForgotPassword(rateLimitedEmail);
+  assertStatus(emailLimitedResponse, 429, "forgot password sixth same-email request");
+  assertExactKeys(
+    emailLimitedResponse.body,
+    ["code", "message"],
+    "forgot password rate-limit response",
+  );
+  assert(
+    emailLimitedResponse.body.code === "RESET_RATE_LIMITED",
+    "forgot password rate limit should expose the documented code",
+  );
+
+  const indexes = await resetTokens.listIndexes().toArray();
+  const userIndex = indexes.find((index) => index.key?.userId === 1);
+  const expiryIndex = indexes.find((index) => index.key?.expiresAt === 1);
+  assert(userIndex?.unique === true, "password reset user index should enforce one token per user");
+  assert(expiryIndex?.expireAfterSeconds === 0, "password reset expiry index should be TTL cleanup");
+
+  console.log("PASS forgot-password enumeration, replacement, validation, and email rate limit");
+}
+
+async function checkForgotPasswordIpRateLimit() {
+  while (forgotPasswordIpRequestCount < 20) {
+    const requestNumber = forgotPasswordIpRequestCount + 1;
+    const response = await requestForgotPassword(
+      `applyflow-e2e-ip-${requestNumber}-${RUN_ID}@example.test`,
+      { forwardedFor: `198.51.100.${requestNumber}` },
+    );
+    assertStatus(response, 200, `forgot password IP limit request ${requestNumber}`);
+  }
+
+  const limitedResponse = await requestForgotPassword(
+    `applyflow-e2e-ip-limited-${RUN_ID}@example.test`,
+    { forwardedFor: "203.0.113.250" },
+  );
+  assertStatus(limitedResponse, 429, "forgot password twenty-first IP request");
+  assert(
+    limitedResponse.body?.code === "RESET_RATE_LIMITED",
+    "IP rate limit should use the same non-enumerating response code",
+  );
+  console.log("PASS forgot-password IP rate limit with untrusted forwarded headers ignored");
 }
 
 function createSessionToken(userId, tokenVersion) {
@@ -359,6 +495,7 @@ async function main() {
 
   const primaryUser = await createTestUser("primary");
   primaryToken = await checkTokenVersionContract(primaryUser);
+  await checkForgotPasswordContract(primaryUser);
 
   const missingTokenResponse = await request("GET", "/auth/me");
   assertStatus(missingTokenResponse, 401, "auth me without token");
@@ -1401,6 +1538,7 @@ async function main() {
     "deleting the primary application must not delete the secondary user's event",
   );
   console.log("PASS user-scoped delete cascade");
+  await checkForgotPasswordIpRateLimit();
 }
 
 let mainError = null;
@@ -1418,6 +1556,14 @@ try {
 
     if (cleanupFailure) {
       cleanupFailures.push(cleanupFailure);
+    }
+  }
+
+  for (const userId of passwordResetUserIds) {
+    try {
+      await getPasswordResetTokensCollection().deleteMany({ userId: new ObjectId(userId) });
+    } catch (error) {
+      cleanupFailures.push(`password reset token cleanup: ${error.message}`);
     }
   }
 

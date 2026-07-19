@@ -63,3 +63,24 @@ export function validateLoginPayload(payload) {
     errors,
   };
 }
+
+export function validateForgotPasswordPayload(payload) {
+  const email = normalizeEmail(payload.email);
+  const errors = {};
+  const unknownFields = Object.keys(payload).filter((fieldName) => fieldName !== "email");
+
+  if (unknownFields.length > 0) {
+    errors.body = `Unsupported field(s): ${unknownFields.join(", ")}`;
+  }
+
+  if (!email) {
+    errors.email = "Email is required";
+  } else if (!EMAIL_PATTERN.test(email)) {
+    errors.email = "Email must be a valid email address";
+  }
+
+  return {
+    value: { email },
+    errors,
+  };
+}

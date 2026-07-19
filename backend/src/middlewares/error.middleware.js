@@ -22,6 +22,7 @@ export function errorMiddleware(err, _req, res, _next) {
   res.status(statusCode).json({
     message,
     ...(!isServerError && err.errors ? { errors: err.errors } : {}),
+    ...(!isServerError && err.code ? { code: err.code } : {}),
     ...(isServerError && config.nodeEnv !== "production" && err.stack
       ? { stack: err.stack }
       : {}),

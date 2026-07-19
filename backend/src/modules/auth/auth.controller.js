@@ -1,4 +1,8 @@
 import { getCurrentUser, loginUser, registerUser } from "./auth.service.js";
+import {
+  FORGOT_PASSWORD_RESPONSE_MESSAGE,
+  requestPasswordReset,
+} from "./password-reset.service.js";
 
 export async function register(req, res) {
   const user = await registerUser(req.validatedBody);
@@ -27,5 +31,13 @@ export async function me(req, res) {
   res.status(200).json({
     success: true,
     user,
+  });
+}
+
+export async function forgotPassword(req, res) {
+  await requestPasswordReset(req.validatedBody.email);
+
+  res.status(200).json({
+    message: FORGOT_PASSWORD_RESPONSE_MESSAGE,
   });
 }

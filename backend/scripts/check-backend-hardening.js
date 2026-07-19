@@ -8,10 +8,13 @@ process.env.PORT ||= "4000";
 process.env.MONGODB_URI ||= "mongodb://127.0.0.1:27017";
 process.env.MONGODB_DB_NAME ||= "applyflow_test";
 process.env.JWT_SECRET ||= "test-secret-for-hardening-check";
+process.env.FRONTEND_ORIGIN ||= "http://localhost:5173";
+process.env.EMAIL_PROVIDER ||= "console";
 
 const {
   BadRequestError,
   NotFoundError,
+  TooManyRequestsError,
   UnauthorizedError,
   ValidationError,
 } = await import("../src/domain/shared/domain-errors.js");
@@ -47,6 +50,22 @@ const { buildDashboardSummary, RECENT_APPLICATION_LIMIT } = await import(
 );
 const { validateBody, validateQuery } = await import("../src/middlewares/validate.middleware.js");
 const { toObjectId } = await import("../src/utils/object-id.utils.js");
+const { validateForgotPasswordPayload } = await import(
+  "../src/modules/auth/auth.validator.js"
+);
+const { createForgotPasswordRateLimitMiddleware } = await import(
+  "../src/middlewares/forgot-password-rate-limit.middleware.js"
+);
+const { createPasswordResetEmailSender } = await import(
+  "../src/modules/auth/password-reset-email.adapter.js"
+);
+const { createPasswordResetRequester } = await import(
+  "../src/modules/auth/password-reset.service.js"
+);
+const { createRawPasswordResetToken, hashPasswordResetToken } = await import(
+  "../src/modules/auth/password-reset-token.js"
+);
+const { createApp } = await import("../src/app.js");
 
 const VALID_USER_ID = "0123456789abcdef01234567";
 const VALID_APPLICATION_ID = "abcdefabcdefabcdefabcdef";
@@ -92,6 +111,14 @@ async function runAuthMiddleware(headers = {}) {
     request,
     error: nextError,
   };
+}
+
+async function runRequestMiddleware(middleware, request) {
+  const nextError = await new Promise((resolve, reject) => {
+    Promise.resolve(middleware(request, {}, resolve)).catch(reject);
+  });
+
+  return nextError;
 }
 
 async function assertRejectsWithBadRequest(action, expectedMessage) {
@@ -1018,6 +1045,286 @@ async function checkAuthMiddleware() {
   }
 }
 
+function checkForgotPasswordValidation() {
+  const valid = validateForgotPasswordPayload({
+    email: "  STUDENT@example.test  ",
+  });
+
+  assert.deepEqual(valid, {
+    value: { email: "student@example.test" },
+    errors: {},
+  });
+  assert.deepEqual(validateForgotPasswordPayload({}).errors, {
+    email: "Email is required",
+  });
+  assert.deepEqual(validateForgotPasswordPayload({ email: "invalid" }).errors, {
+    email: "Email must be a valid email address",
+  });
+  assert.deepEqual(
+    validateForgotPasswordPayload({
+      email: "student@example.test",
+      role: "admin",
+    }).errors,
+    {
+      body: "Unsupported field(s): role",
+    },
+  );
+}
+
+function checkPasswordResetTokenAndProxyPolicy() {
+  const rawToken = createRawPasswordResetToken();
+
+  assert.match(rawToken, /^[a-f0-9]{64}$/);
+  assert.match(hashPasswordResetToken(rawToken), /^[a-f0-9]{64}$/);
+  assert.notEqual(hashPasswordResetToken(rawToken), rawToken);
+  assert.equal(createApp().get("trust proxy"), false);
+}
+
+async function checkForgotPasswordRateLimit() {
+  let timestamp = 1_000;
+  const createMiddleware = (overrides = {}) =>
+    createForgotPasswordRateLimitMiddleware({
+      emailLimit: 2,
+      emailWindowMs: 1_000,
+      ipLimit: 3,
+      ipWindowMs: 2_000,
+      now: () => timestamp,
+      ...overrides,
+    });
+  const emailMiddleware = createMiddleware({ ipLimit: 100 });
+  const request = {
+    ip: "127.0.0.1",
+    validatedBody: { email: "student@example.test" },
+  };
+
+  assert.equal(await runRequestMiddleware(emailMiddleware, request), undefined);
+  assert.equal(await runRequestMiddleware(emailMiddleware, request), undefined);
+
+  const emailLimitError = await runRequestMiddleware(emailMiddleware, request);
+  assert.ok(emailLimitError instanceof TooManyRequestsError);
+  assert.equal(emailLimitError.statusCode, 429);
+  assert.equal(emailLimitError.code, "RESET_RATE_LIMITED");
+
+  const rateLimitResponse = await runMiddleware(emailLimitError);
+  assert.deepEqual(rateLimitResponse.body, {
+    message: "Too many password reset requests. Please try again later.",
+    code: "RESET_RATE_LIMITED",
+  });
+
+  timestamp += 1_001;
+  assert.equal(await runRequestMiddleware(emailMiddleware, request), undefined);
+
+  const ipMiddleware = createMiddleware({ emailLimit: 100, ipLimit: 2 });
+  for (const email of ["one@example.test", "two@example.test"]) {
+    assert.equal(
+      await runRequestMiddleware(ipMiddleware, {
+        ip: "127.0.0.2",
+        validatedBody: { email },
+      }),
+      undefined,
+    );
+  }
+
+  const ipLimitError = await runRequestMiddleware(ipMiddleware, {
+    ip: "127.0.0.2",
+    validatedBody: { email: "three@example.test" },
+  });
+  assert.ok(ipLimitError instanceof TooManyRequestsError);
+  assert.equal(ipLimitError.code, "RESET_RATE_LIMITED");
+}
+
+async function checkPasswordResetEmailAdapters() {
+  const consoleDeliveries = [];
+  const consoleSender = createPasswordResetEmailSender({
+    provider: "console",
+    consoleWriter: (delivery) => consoleDeliveries.push(delivery),
+  });
+  const resetUrl = "http://localhost:5173/reset-password?token=test-only-token";
+
+  await consoleSender({
+    to: "student@example.test",
+    resetUrl,
+  });
+  assert.equal(consoleDeliveries.length, 1);
+  assert.equal(consoleDeliveries[0].to, "student@example.test");
+  assert.ok(consoleDeliveries[0].text.includes(resetUrl));
+
+  const resendRequests = [];
+  const resendSender = createPasswordResetEmailSender({
+    provider: "resend",
+    resendApiKey: "safe-test-key",
+    resendFromEmail: "no-reply@example.test",
+    resendClient: {
+      emails: {
+        async send(payload) {
+          resendRequests.push(payload);
+          return { data: { id: "test-email-id" }, error: null };
+        },
+      },
+    },
+  });
+
+  await resendSender({
+    to: "student@example.test",
+    resetUrl,
+  });
+  assert.deepEqual(resendRequests[0], {
+    from: "no-reply@example.test",
+    to: "student@example.test",
+    subject: "Reset your ApplyFlow password",
+    text: consoleDeliveries[0].text,
+  });
+
+  const failingSender = createPasswordResetEmailSender({
+    provider: "resend",
+    resendApiKey: "safe-test-key",
+    resendFromEmail: "no-reply@example.test",
+    resendClient: {
+      emails: {
+        async send() {
+          return { data: null, error: { message: "provider-private-detail" } };
+        },
+      },
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      failingSender({
+        to: "student@example.test",
+        resetUrl,
+      }),
+    (error) =>
+      error.message === "Password reset email delivery failed" &&
+      !error.message.includes("provider-private-detail"),
+  );
+}
+
+async function checkPasswordResetService() {
+  const userId = new ObjectId();
+  const rawTokens = ["a".repeat(64), "b".repeat(64)];
+  const storedTokens = [];
+  const deliveries = [];
+  const requestReset = createPasswordResetRequester({
+    findUser: async (email) => ({ _id: userId, email }),
+    replaceToken: async (currentUserId, token) => {
+      const storedToken = {
+        _id: new ObjectId(),
+        userId: currentUserId,
+        ...token,
+      };
+      storedTokens.push(storedToken);
+      return storedToken;
+    },
+    deleteToken: async () => true,
+    sendEmail: async (delivery) => deliveries.push(delivery),
+    createRawToken: () => rawTokens.shift(),
+    now: () => new Date("2026-07-19T00:00:00.000Z"),
+    frontendOrigin: "http://localhost:5173",
+    tokenTtlMinutes: 30,
+  });
+
+  await requestReset("student@example.test");
+  await requestReset("student@example.test");
+
+  assert.equal(storedTokens.length, 2);
+  assert.equal(storedTokens[0].userId, userId);
+  assert.match(storedTokens[0].tokenHash, /^[a-f0-9]{64}$/);
+  assert.notEqual(storedTokens[0].tokenHash, "a".repeat(64));
+  assert.notEqual(storedTokens[0].tokenHash, storedTokens[1].tokenHash);
+  assert.equal(storedTokens[0].createdAt.toISOString(), "2026-07-19T00:00:00.000Z");
+  assert.equal(storedTokens[0].expiresAt.toISOString(), "2026-07-19T00:30:00.000Z");
+  assert.equal(new URL(deliveries[0].resetUrl).searchParams.get("token"), "a".repeat(64));
+
+  let unknownAccountMutated = false;
+  const requestUnknownReset = createPasswordResetRequester({
+    findUser: async () => null,
+    replaceToken: async () => {
+      unknownAccountMutated = true;
+    },
+    sendEmail: async () => {
+      unknownAccountMutated = true;
+    },
+  });
+  await requestUnknownReset("missing@example.test");
+  assert.equal(unknownAccountMutated, false);
+
+  const createdTokenId = new ObjectId();
+  const deletedTokenIds = [];
+  const operationalEvents = [];
+  const requestWithDeliveryFailure = createPasswordResetRequester({
+    findUser: async () => ({ _id: userId, email: "student@example.test" }),
+    replaceToken: async (_currentUserId, token) => ({ _id: createdTokenId, ...token }),
+    deleteToken: async (tokenId) => deletedTokenIds.push(tokenId),
+    sendEmail: async () => {
+      throw new Error("provider-private-detail");
+    },
+    createRawToken: () => "c".repeat(64),
+    frontendOrigin: "http://localhost:5173",
+    operationalLogger: {
+      error(event) {
+        operationalEvents.push(event);
+      },
+    },
+  });
+
+  await requestWithDeliveryFailure("student@example.test");
+  assert.deepEqual(deletedTokenIds, [createdTokenId]);
+  assert.deepEqual(operationalEvents, ["password_reset_delivery_failed"]);
+  assert.ok(!JSON.stringify(operationalEvents).includes("student@example.test"));
+  assert.ok(!JSON.stringify(operationalEvents).includes("c".repeat(64)));
+  assert.ok(!JSON.stringify(operationalEvents).includes("provider-private-detail"));
+}
+
+function checkPasswordResetEnvironmentValidation() {
+  const script = 'await import("./src/config/env.js");';
+  const baseEnvironment = {
+    ...process.env,
+    NODE_ENV: "development",
+    PORT: "4000",
+    MONGODB_URI: "mongodb://127.0.0.1:27017",
+    MONGODB_DB_NAME: "applyflow_test",
+    JWT_SECRET: "safe-test-secret",
+    FRONTEND_ORIGIN: "http://localhost:5173",
+    EMAIL_PROVIDER: "console",
+    RESEND_API_KEY: "",
+    RESEND_FROM_EMAIL: "",
+  };
+  const runProbe = (overrides) =>
+    execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+      cwd: process.cwd(),
+      env: { ...baseEnvironment, ...overrides },
+      stdio: "pipe",
+    });
+
+  assert.doesNotThrow(() => runProbe({}));
+  assert.doesNotThrow(() =>
+    runProbe({
+      NODE_ENV: "production",
+      FRONTEND_ORIGIN: "https://applyflow.example.test",
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "safe-test-key",
+      RESEND_FROM_EMAIL: "no-reply@example.test",
+    }),
+  );
+  assert.throws(() =>
+    runProbe({
+      NODE_ENV: "production",
+      FRONTEND_ORIGIN: "https://applyflow.example.test",
+      EMAIL_PROVIDER: "console",
+    }),
+  );
+  assert.throws(() =>
+    runProbe({
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "",
+      RESEND_FROM_EMAIL: "no-reply@example.test",
+    }),
+  );
+  assert.throws(() => runProbe({ FRONTEND_ORIGIN: "http://localhost:5173/reset" }));
+  assert.throws(() => runProbe({ PASSWORD_RESET_TOKEN_TTL_MINUTES: "0" }));
+}
+
 function checkProductionErrorMiddleware() {
   const script = `
     process.env.NODE_ENV = "production";
@@ -1025,6 +1332,10 @@ function checkProductionErrorMiddleware() {
     process.env.MONGODB_URI = "mongodb://localhost:27017";
     process.env.MONGODB_DB_NAME = "ApplyFlow";
     process.env.JWT_SECRET = "test-secret";
+    process.env.FRONTEND_ORIGIN = "https://applyflow.example.test";
+    process.env.EMAIL_PROVIDER = "resend";
+    process.env.RESEND_API_KEY = "safe-test-key";
+    process.env.RESEND_FROM_EMAIL = "no-reply@example.test";
     console.error = () => {};
     const { errorMiddleware } = await import("./src/middlewares/error.middleware.js");
     const response = {
@@ -1133,6 +1444,12 @@ await checkEventCrudContract();
 checkDashboardContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
+checkForgotPasswordValidation();
+checkPasswordResetTokenAndProxyPolicy();
+await checkForgotPasswordRateLimit();
+await checkPasswordResetEmailAdapters();
+await checkPasswordResetService();
+checkPasswordResetEnvironmentValidation();
 checkProductionErrorMiddleware();
 await checkServiceMalformedIdFallbacks();
 await checkAuthRepositoryMalformedIdFallback();

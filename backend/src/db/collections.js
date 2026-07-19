@@ -4,6 +4,7 @@ export const COLLECTION_NAMES = {
   users: "users",
   applications: "applications",
   applicationEvents: "application_events",
+  passwordResetTokens: "passwordResetTokens",
 };
 
 export function getUsersCollection() {
@@ -16,4 +17,8 @@ export function getApplicationsCollection() {
 
 export function getApplicationEventsCollection() {
   return getDb().collection(COLLECTION_NAMES.applicationEvents);
+}
+
+export function getPasswordResetTokensCollection() {
+  return getDb().collection(COLLECTION_NAMES.passwordResetTokens);
 }
