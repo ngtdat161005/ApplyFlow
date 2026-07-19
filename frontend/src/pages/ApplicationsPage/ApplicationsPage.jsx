@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   createApplication,
@@ -8,6 +9,11 @@ import {
   getApplications,
   updateApplication,
 } from '../../api/application.api.js';
+import {
+  applicationKeys,
+  canonicalizeApplicationFilters,
+  dashboardKeys,
+} from '../../app/query-client.js';
 import { ApplicationFilters } from '../../features/applications/components/ApplicationFilters.jsx';
 import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
 import { ApplicationList } from '../../features/applications/components/ApplicationList.jsx';
@@ -25,84 +31,137 @@ function hasActiveFilters(filters) {
 }
 
 export default function ApplicationsPage() {
-  const [applications, setApplications] = useState([]);
+  const queryClient = useQueryClient();
   const [applicationActionError, setApplicationActionError] = useState('');
   const [deletingApplicationId, setDeletingApplicationId] = useState('');
   const [editingApplicationId, setEditingApplicationId] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [fetchError, setFetchError] = useState('');
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteApplicationId, setPendingDeleteApplicationId] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchApplications = useCallback(async () => {
-    setIsLoading(true);
-    setFetchError('');
+  const canonicalFilters = useMemo(
+    () => canonicalizeApplicationFilters(filters),
+    [filters.search, filters.sortBy, filters.sortOrder, filters.status],
+  );
 
-    try {
-      const response = await getApplications(filters);
-      setApplications(getApplicationListFromResponse(response));
-    } catch (error) {
-      setFetchError(getErrorMessage(error, 'Unable to load applications.'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters]);
+  const applicationsQuery = useQuery({
+    queryKey: applicationKeys.list(canonicalFilters),
+    queryFn: async () => {
+      const response = await getApplications(canonicalFilters);
+      return getApplicationListFromResponse(response);
+    },
+  });
 
-  useEffect(() => {
-    fetchApplications();
-  }, [fetchApplications, refreshKey]);
+  const createApplicationMutation = useMutation({
+    mutationFn: async (payload) => {
+      const response = await createApplication(payload);
+      const createdApplication = getApplicationFromResponse(response);
+
+      if (!createdApplication) {
+        throw new Error('Create application response did not include an application.');
+      }
+
+      return createdApplication;
+    },
+    onSuccess: async () => {
+      setIsCreateFormOpen(false);
+      setApplicationActionError('');
+      setEditingApplicationId('');
+      setPendingDeleteApplicationId('');
+      setFilters({ ...DEFAULT_FILTERS });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: applicationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+  });
+
+  const updateApplicationMutation = useMutation({
+    mutationFn: async ({ applicationId, payload }) => {
+      const response = await updateApplication(applicationId, payload);
+      const updatedApplication = getApplicationFromResponse(response);
+
+      if (!updatedApplication) {
+        throw new Error('Update application response did not include an application.');
+      }
+
+      return updatedApplication;
+    },
+    onSuccess: async (updatedApplication) => {
+      setApplicationActionError('');
+      setEditingApplicationId('');
+      setPendingDeleteApplicationId('');
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: applicationKeys.detail(updatedApplication._id),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: applicationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+  });
+
+  const deleteApplicationMutation = useMutation({
+    mutationFn: async (application) => {
+      await deleteApplication(application._id);
+      return application;
+    },
+    onMutate: (application) => {
+      setDeletingApplicationId(application._id);
+      setApplicationActionError('');
+    },
+    onSuccess: async (deletedApplication) => {
+      queryClient.removeQueries({
+        queryKey: applicationKeys.detail(deletedApplication._id),
+      });
+
+      setEditingApplicationId((currentId) =>
+        currentId === deletedApplication._id ? '' : currentId,
+      );
+      setPendingDeleteApplicationId('');
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: applicationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+    onError: (error) => {
+      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+    },
+    onSettled: () => {
+      setDeletingApplicationId('');
+    },
+  });
+
+  const applications = applicationsQuery.data || [];
+  const queryError = applicationsQuery.isError
+    ? getErrorMessage(applicationsQuery.error, 'Unable to load applications.')
+    : '';
+  const hasResolvedData = applicationsQuery.data !== undefined;
+  const initialQueryError = hasResolvedData ? '' : queryError;
+  const backgroundQueryError = hasResolvedData ? queryError : '';
+  const isInitialLoading = applicationsQuery.isPending;
+  const isBackgroundFetching = applicationsQuery.isFetching && hasResolvedData;
 
   async function handleCreateApplication(payload) {
-    const response = await createApplication(payload);
-    const createdApplication = getApplicationFromResponse(response);
-
-    if (!createdApplication) {
-      throw new Error('Create application response did not include an application.');
-    }
-
-    setIsCreateFormOpen(false);
-    setApplicationActionError('');
-    setEditingApplicationId('');
-    setPendingDeleteApplicationId('');
-    setFilters(DEFAULT_FILTERS);
-    setRefreshKey((currentKey) => currentKey + 1);
-
-    return createdApplication;
+    return createApplicationMutation.mutateAsync(payload);
   }
 
   async function handleUpdateApplication(application, payload) {
-    const response = await updateApplication(application._id, payload);
-    const updatedApplication = getApplicationFromResponse(response);
-
-    if (!updatedApplication) {
-      throw new Error('Update application response did not include an application.');
-    }
-
-    setApplicationActionError('');
-    setEditingApplicationId('');
-    setPendingDeleteApplicationId('');
-    setRefreshKey((currentKey) => currentKey + 1);
-
-    return updatedApplication;
+    return updateApplicationMutation.mutateAsync({
+      applicationId: application._id,
+      payload,
+    });
   }
 
   async function handleDeleteApplication(application) {
-    setDeletingApplicationId(application._id);
-    setApplicationActionError('');
-
     try {
-      await deleteApplication(application._id);
-      setApplications((currentApplications) =>
-        currentApplications.filter((currentApplication) => currentApplication._id !== application._id),
-      );
-      setEditingApplicationId((currentId) => (currentId === application._id ? '' : currentId));
-      setPendingDeleteApplicationId('');
-    } catch (error) {
-      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
-    } finally {
-      setDeletingApplicationId('');
+      await deleteApplicationMutation.mutateAsync(application);
+    } catch {
+      // The mutation callback owns the visible delete error state.
     }
   }
 
@@ -114,6 +173,10 @@ export default function ApplicationsPage() {
 
   function handleResetFilters() {
     setFilters({ ...DEFAULT_FILTERS });
+  }
+
+  function handleApplyFilters(nextFilters) {
+    setFilters(canonicalizeApplicationFilters(nextFilters));
   }
 
   return (
@@ -158,23 +221,39 @@ export default function ApplicationsPage() {
 
       <section className="application-panel" aria-label="Application filters">
         <ApplicationFilters
-          filters={filters}
-          isLoading={isLoading}
-          onApply={setFilters}
+          filters={canonicalFilters}
+          isLoading={isInitialLoading}
+          onApply={handleApplyFilters}
           onReset={handleResetFilters}
         />
       </section>
+
+      {isBackgroundFetching ? (
+        <p className="page-muted" role="status">
+          Updating applications...
+        </p>
+      ) : null}
+
+      {backgroundQueryError ? (
+        <div className="applications-state applications-state-error" role="alert">
+          <h3>Could not update applications</h3>
+          <p>{backgroundQueryError}</p>
+          <button type="button" onClick={() => applicationsQuery.refetch()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
 
       <ApplicationList
         actionError={applicationActionError}
         applications={applications}
         deletingApplicationId={deletingApplicationId}
         editingApplicationId={editingApplicationId}
-        error={fetchError}
-        hasActiveFilters={hasActiveFilters(filters)}
+        error={initialQueryError}
+        hasActiveFilters={hasActiveFilters(canonicalFilters)}
         isDeleteConfirmOpenFor={pendingDeleteApplicationId}
         isCreateFormOpen={isCreateFormOpen}
-        isLoading={isLoading}
+        isLoading={isInitialLoading}
         onCancelDelete={() => setPendingDeleteApplicationId('')}
         onCancelEdit={() => setEditingApplicationId('')}
         onConfirmDelete={handleDeleteApplication}
@@ -191,7 +270,7 @@ export default function ApplicationsPage() {
           setPendingDeleteApplicationId(application._id);
         }}
         onResetFilters={handleResetFilters}
-        onRetry={fetchApplications}
+        onRetry={() => applicationsQuery.refetch()}
         onUpdate={handleUpdateApplication}
       />
     </section>
