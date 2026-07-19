@@ -72,3 +72,12 @@ export async function deleteEventsByApplicationForUser(userId, applicationId) {
 
   return result.deletedCount;
 }
+
+export async function deleteEventsByUser(userId, { session }) {
+  const result = await getApplicationEventsCollection().deleteMany(
+    { userId },
+    { session },
+  );
+
+  return result.deletedCount;
+}

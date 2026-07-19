@@ -89,3 +89,12 @@ export async function deleteApplicationByIdForUser(userId, applicationId) {
 
   return result.deletedCount === 1;
 }
+
+export async function deleteApplicationsByUser(userId, { session }) {
+  const result = await getApplicationsCollection().deleteMany(
+    { userId },
+    { session },
+  );
+
+  return result.deletedCount;
+}
