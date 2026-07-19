@@ -1,4 +1,5 @@
 import dns from "node:dns";
+import { randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
 
@@ -8,11 +9,14 @@ process.env.FRONTEND_ORIGIN ||= "http://localhost:5173";
 process.env.EMAIL_PROVIDER ||= "console";
 
 const { config } = await import("../src/config/env.js");
-const { closeMongoConnection, connectToMongo } = await import(
+const { closeMongoConnection, connectToMongo, getMongoClient } = await import(
   "../src/config/mongodb.js"
 );
 const { getPasswordResetTokensCollection, getUsersCollection } = await import(
   "../src/db/collections.js"
+);
+const { hashPasswordResetToken } = await import(
+  "../src/modules/auth/password-reset-token.js"
 );
 
 const DEFAULT_ORIGIN = "http://127.0.0.1:4000";
@@ -89,6 +93,13 @@ function assertValidationError(response, fieldName, label) {
     typeof response.body?.errors?.[fieldName] === "string",
     `${label} should include an error for ${fieldName}`,
   );
+}
+
+function assertV3Error(response, expectedStatus, expectedCode, label) {
+  assertStatus(response, expectedStatus, label);
+  assertExactKeys(response.body, ["code", "message"], label);
+  assert(response.body.code === expectedCode, `${label} should use ${expectedCode}`);
+  assertControlledError(response, label);
 }
 
 async function request(method, path, { token, authorization, body, forwardedFor } = {}) {
@@ -371,6 +382,178 @@ async function checkForgotPasswordIpRateLimit() {
     "IP rate limit should use the same non-enumerating response code",
   );
   console.log("PASS forgot-password IP rate limit with untrusted forwarded headers ignored");
+}
+
+function createRuntimeResetToken() {
+  return randomBytes(32).toString("hex");
+}
+
+async function storeResetToken(userId, rawToken, expiresAt) {
+  const resetTokens = getPasswordResetTokensCollection();
+  const objectUserId = new ObjectId(userId);
+  passwordResetUserIds.add(objectUserId.toString());
+  await resetTokens.deleteMany({ userId: objectUserId });
+  await resetTokens.insertOne({
+    userId: objectUserId,
+    tokenHash: hashPasswordResetToken(rawToken),
+    expiresAt,
+    createdAt: new Date(),
+  });
+}
+
+async function checkResetPasswordContract() {
+  const hello = await getMongoClient().db(config.mongodb.dbName).admin().command({ hello: 1 });
+  assert(Boolean(hello.setName), "reset transaction evidence requires a real replica set");
+  assert(
+    Number.isFinite(hello.logicalSessionTimeoutMinutes),
+    "reset transaction evidence requires logical sessions",
+  );
+
+  const newPassword = "ApplyFlowReset456!";
+  const malformedResponse = await request("POST", "/auth/reset-password", {
+    body: { token: "malformed", newPassword },
+  });
+  assertV3Error(malformedResponse, 400, "INVALID_TOKEN", "reset malformed token");
+
+  const missingResponse = await request("POST", "/auth/reset-password", {
+    body: { newPassword },
+  });
+  assertV3Error(missingResponse, 400, "INVALID_TOKEN", "reset missing token");
+  assert(
+    JSON.stringify(missingResponse.body) === JSON.stringify(malformedResponse.body),
+    "missing and malformed reset tokens should share the same public error",
+  );
+
+  const weakPasswordResponse = await request("POST", "/auth/reset-password", {
+    body: { token: createRuntimeResetToken(), newPassword: "short" },
+  });
+  assertStatus(weakPasswordResponse, 400, "reset weak password");
+  assertValidationError(weakPasswordResponse, "newPassword", "reset weak password");
+
+  const unknownFieldResponse = await request("POST", "/auth/reset-password", {
+    body: {
+      token: createRuntimeResetToken(),
+      newPassword,
+      confirmation: newPassword,
+    },
+  });
+  assertStatus(unknownFieldResponse, 400, "reset unknown field");
+  assertValidationError(unknownFieldResponse, "body", "reset unknown field");
+
+  const invalidResponse = await request("POST", "/auth/reset-password", {
+    body: { token: createRuntimeResetToken(), newPassword },
+  });
+  assertV3Error(invalidResponse, 400, "INVALID_TOKEN", "reset unknown token");
+
+  const expiredUser = await createTestUser("reset-expired");
+  const expiredToken = createRuntimeResetToken();
+  await storeResetToken(expiredUser.userId, expiredToken, new Date(Date.now() - 60_000));
+  const expiredResponse = await request("POST", "/auth/reset-password", {
+    body: { token: expiredToken, newPassword },
+  });
+  assertV3Error(expiredResponse, 400, "INVALID_TOKEN", "reset expired token");
+  assert(
+    JSON.stringify(expiredResponse.body) === JSON.stringify(malformedResponse.body),
+    "expired and malformed reset tokens should share the same public error",
+  );
+
+  const resetUser = await createTestUser("reset-valid");
+  const validToken = createRuntimeResetToken();
+  await storeResetToken(resetUser.userId, validToken, new Date(Date.now() + 30 * 60_000));
+  const resetResponse = await request("POST", "/auth/reset-password", {
+    body: { token: validToken, newPassword },
+  });
+  assertStatus(resetResponse, 200, "valid password reset");
+  assertExactKeys(resetResponse.body, ["message"], "valid password reset response");
+  assert(
+    resetResponse.body.message === "Password reset successful.",
+    "valid password reset should return the controlled success response",
+  );
+  assert(!resetResponse.body.accessToken, "password reset must not auto-login");
+
+  const usedResponse = await request("POST", "/auth/reset-password", {
+    body: { token: validToken, newPassword },
+  });
+  assertV3Error(usedResponse, 400, "INVALID_TOKEN", "reset used token");
+  assert(
+    JSON.stringify(usedResponse.body) === JSON.stringify(malformedResponse.body),
+    "used and malformed reset tokens should share the same public error",
+  );
+
+  const oldJwtResponse = await request("GET", "/auth/me", { token: resetUser.token });
+  assertStatus(oldJwtResponse, 401, "old JWT after password reset");
+  const oldPasswordLogin = await request("POST", "/auth/login", {
+    body: { email: resetUser.email, password: resetUser.password },
+  });
+  assertStatus(oldPasswordLogin, 401, "old password after reset");
+  const newPasswordLogin = await request("POST", "/auth/login", {
+    body: { email: resetUser.email, password: newPassword },
+  });
+  assertStatus(newPasswordLogin, 200, "new password after reset");
+  const resetUserRecord = await getUsersCollection().findOne({
+    _id: new ObjectId(resetUser.userId),
+  });
+  assert(resetUserRecord?.tokenVersion === 1, "password reset should increment tokenVersion once");
+
+  const concurrentUser = await createTestUser("reset-concurrent");
+  const concurrentToken = createRuntimeResetToken();
+  await storeResetToken(
+    concurrentUser.userId,
+    concurrentToken,
+    new Date(Date.now() + 30 * 60_000),
+  );
+  const concurrentResponses = await Promise.all([
+    request("POST", "/auth/reset-password", {
+      body: { token: concurrentToken, newPassword },
+    }),
+    request("POST", "/auth/reset-password", {
+      body: { token: concurrentToken, newPassword },
+    }),
+  ]);
+  const statusCodes = concurrentResponses.map((response) => response.status).sort();
+  assert(
+    statusCodes[0] === 200 && statusCodes[1] === 400,
+    `concurrent reset should produce one 200 and one 400; got ${statusCodes.join(", ")}`,
+  );
+  const rejectedConcurrentResponse = concurrentResponses.find((response) => response.status === 400);
+  assertV3Error(
+    rejectedConcurrentResponse,
+    400,
+    "INVALID_TOKEN",
+    "concurrent reset loser",
+  );
+  const concurrentUserRecord = await getUsersCollection().findOne({
+    _id: new ObjectId(concurrentUser.userId),
+  });
+  assert(
+    concurrentUserRecord?.tokenVersion === 1,
+    "concurrent reset should increment tokenVersion exactly once",
+  );
+  const concurrentOldJwtResponse = await request("GET", "/auth/me", {
+    token: concurrentUser.token,
+  });
+  assertStatus(concurrentOldJwtResponse, 401, "old JWT after concurrent reset");
+
+  const orphanUserId = new ObjectId();
+  const rollbackToken = createRuntimeResetToken();
+  await storeResetToken(
+    orphanUserId.toString(),
+    rollbackToken,
+    new Date(Date.now() + 30 * 60_000),
+  );
+  const rollbackResponse = await request("POST", "/auth/reset-password", {
+    body: { token: rollbackToken, newPassword },
+  });
+  assertV3Error(rollbackResponse, 400, "INVALID_TOKEN", "reset rollback after missing user");
+  const restoredToken = await getPasswordResetTokensCollection().findOne({
+    userId: orphanUserId,
+    tokenHash: hashPasswordResetToken(rollbackToken),
+  });
+  assert(restoredToken, "failed password update should roll back the claimed reset token");
+
+  console.log(
+    "PASS real replica-set password reset commit, rollback, expiry, session invalidation, and concurrency",
+  );
 }
 
 function createSessionToken(userId, tokenVersion) {
@@ -1539,6 +1722,7 @@ async function main() {
   );
   console.log("PASS user-scoped delete cascade");
   await checkForgotPasswordIpRateLimit();
+  await checkResetPasswordContract();
 }
 
 let mainError = null;

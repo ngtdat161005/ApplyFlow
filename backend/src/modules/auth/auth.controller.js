@@ -1,7 +1,9 @@
 import { getCurrentUser, loginUser, registerUser } from "./auth.service.js";
 import {
+  consumePasswordReset,
   FORGOT_PASSWORD_RESPONSE_MESSAGE,
   requestPasswordReset,
+  RESET_PASSWORD_RESPONSE_MESSAGE,
 } from "./password-reset.service.js";
 
 export async function register(req, res) {
@@ -39,5 +41,13 @@ export async function forgotPassword(req, res) {
 
   res.status(200).json({
     message: FORGOT_PASSWORD_RESPONSE_MESSAGE,
+  });
+}
+
+export async function resetPassword(req, res) {
+  await consumePasswordReset(req.validatedBody);
+
+  res.status(200).json({
+    message: RESET_PASSWORD_RESPONSE_MESSAGE,
   });
 }

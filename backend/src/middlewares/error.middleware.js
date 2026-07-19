@@ -10,8 +10,9 @@ export function notFoundHandler(req, res) {
 export function errorMiddleware(err, _req, res, _next) {
   const statusCode = err.statusCode || err.status || 500;
   const isServerError = statusCode >= 500;
+  const isExposedServerError = isServerError && err.expose === true;
   const message =
-    isServerError && config.nodeEnv === "production"
+    isServerError && !isExposedServerError && config.nodeEnv === "production"
       ? "Internal server error"
       : err.message || "Internal server error";
 
@@ -22,7 +23,7 @@ export function errorMiddleware(err, _req, res, _next) {
   res.status(statusCode).json({
     message,
     ...(!isServerError && err.errors ? { errors: err.errors } : {}),
-    ...(!isServerError && err.code ? { code: err.code } : {}),
+    ...((!isServerError || isExposedServerError) && err.code ? { code: err.code } : {}),
     ...(isServerError && config.nodeEnv !== "production" && err.stack
       ? { stack: err.stack }
       : {}),

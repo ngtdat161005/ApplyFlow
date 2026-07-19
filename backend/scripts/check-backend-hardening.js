@@ -50,7 +50,7 @@ const { buildDashboardSummary, RECENT_APPLICATION_LIMIT } = await import(
 );
 const { validateBody, validateQuery } = await import("../src/middlewares/validate.middleware.js");
 const { toObjectId } = await import("../src/utils/object-id.utils.js");
-const { validateForgotPasswordPayload } = await import(
+const { validateForgotPasswordPayload, validateResetPasswordPayload } = await import(
   "../src/modules/auth/auth.validator.js"
 );
 const { createForgotPasswordRateLimitMiddleware } = await import(
@@ -59,12 +59,16 @@ const { createForgotPasswordRateLimitMiddleware } = await import(
 const { createPasswordResetEmailSender } = await import(
   "../src/services/email/password-reset-email.adapter.js"
 );
-const { createPasswordResetRequester } = await import(
+const { createPasswordResetConsumer, createPasswordResetRequester } = await import(
   "../src/modules/auth/password-reset.service.js"
+);
+const { InvalidResetTokenError, ResetUnavailableError } = await import(
+  "../src/modules/auth/password-reset.errors.js"
 );
 const { createRawPasswordResetToken, hashPasswordResetToken } = await import(
   "../src/modules/auth/password-reset-token.js"
 );
+const { createMongoTransactionRunner } = await import("../src/config/mongodb.js");
 const { createApp } = await import("../src/app.js");
 
 const VALID_USER_ID = "0123456789abcdef01234567";
@@ -1276,6 +1280,140 @@ async function checkPasswordResetService() {
   assert.ok(!JSON.stringify(operationalEvents).includes("provider-private-detail"));
 }
 
+function checkResetPasswordValidation() {
+  const token = "a".repeat(64);
+
+  assert.deepEqual(validateResetPasswordPayload({ token, newPassword: "new-pass" }), {
+    value: { token, newPassword: "new-pass" },
+    errors: {},
+  });
+  assert.deepEqual(validateResetPasswordPayload({ token }).errors, {
+    newPassword: "Password is required",
+  });
+  assert.deepEqual(validateResetPasswordPayload({ token, newPassword: "short" }).errors, {
+    newPassword: "Password must be at least 8 characters",
+  });
+  assert.deepEqual(
+    validateResetPasswordPayload({
+      token,
+      newPassword: "new-pass",
+      confirmation: "new-pass",
+    }).errors,
+    { body: "Unsupported field(s): confirmation" },
+  );
+}
+
+async function checkResetPasswordConsumption() {
+  const rawToken = "a".repeat(64);
+  const userId = new ObjectId();
+  const session = { id: "shared-session" };
+  const now = new Date("2026-07-19T01:00:00.000Z");
+  const calls = [];
+  const consumeReset = createPasswordResetConsumer({
+    runTransaction: async (work) => {
+      calls.push(["transaction"]);
+      return work(session);
+    },
+    claimToken: async (tokenHash, currentTime, options) => {
+      calls.push(["claim", tokenHash, currentTime, options.session]);
+      return { _id: new ObjectId(), userId };
+    },
+    updatePassword: async (currentUserId, passwordHash, updatedAt, options) => {
+      calls.push(["update", currentUserId, passwordHash, updatedAt, options.session]);
+      return true;
+    },
+    hashNewPassword: async (password) => {
+      calls.push(["hash-password", password]);
+      return "bcrypt-password-hash";
+    },
+    now: () => now,
+  });
+
+  await consumeReset({ token: rawToken, newPassword: "new-pass" });
+  assert.deepEqual(calls, [
+    ["transaction"],
+    ["claim", hashPasswordResetToken(rawToken), now, session],
+    ["hash-password", "new-pass"],
+    ["update", userId, "bcrypt-password-hash", now, session],
+  ]);
+
+  let invalidTokenStartedTransaction = false;
+  const rejectMalformedToken = createPasswordResetConsumer({
+    runTransaction: async () => {
+      invalidTokenStartedTransaction = true;
+    },
+    hashNewPassword: async () => "unused-hash",
+  });
+  await assert.rejects(
+    () => rejectMalformedToken({ token: "malformed", newPassword: "new-pass" }),
+    (error) =>
+      error instanceof InvalidResetTokenError &&
+      error.statusCode === 400 &&
+      error.code === "INVALID_TOKEN",
+  );
+  assert.equal(invalidTokenStartedTransaction, false);
+
+  const rejectMissingToken = createPasswordResetConsumer({
+    runTransaction: async (work) => work(session),
+    claimToken: async () => null,
+    hashNewPassword: async () => {
+      throw new Error("invalid token must not be hashed");
+    },
+  });
+  await assert.rejects(
+    () => rejectMissingToken({ token: rawToken, newPassword: "new-pass" }),
+    (error) => error instanceof InvalidResetTokenError && error.code === "INVALID_TOKEN",
+  );
+
+  const unavailableError = new Error("private transaction detail");
+  unavailableError.code = 20;
+  const rejectUnavailableTransaction = createPasswordResetConsumer({
+    runTransaction: async () => {
+      throw unavailableError;
+    },
+    hashNewPassword: async () => {
+      throw new Error("unavailable transaction must not hash a password");
+    },
+  });
+  await assert.rejects(
+    () => rejectUnavailableTransaction({ token: rawToken, newPassword: "new-pass" }),
+    (error) =>
+      error instanceof ResetUnavailableError &&
+      error.statusCode === 503 &&
+      error.code === "RESET_UNAVAILABLE" &&
+      !error.message.includes("private transaction detail"),
+  );
+}
+
+async function checkMongoTransactionRunner() {
+  const session = {
+    ended: false,
+    options: null,
+    async withTransaction(work, options) {
+      this.options = options;
+      await work();
+      throw new Error("forced transaction failure");
+    },
+    async endSession() {
+      this.ended = true;
+    },
+  };
+  const runTransaction = createMongoTransactionRunner(() => ({
+    startSession() {
+      return session;
+    },
+  }));
+
+  await assert.rejects(() => runTransaction(async (currentSession) => {
+    assert.equal(currentSession, session);
+  }), /forced transaction failure/);
+  assert.equal(session.ended, true);
+  assert.deepEqual(session.options, {
+    readConcern: { level: "snapshot" },
+    writeConcern: { w: "majority" },
+  });
+}
+
 function checkPasswordResetEnvironmentValidation() {
   const script = 'await import("./src/config/env.js");';
   const baseEnvironment = {
@@ -1338,7 +1476,10 @@ function checkProductionErrorMiddleware() {
     process.env.RESEND_FROM_EMAIL = "no-reply@example.test";
     console.error = () => {};
     const { errorMiddleware } = await import("./src/middlewares/error.middleware.js");
-    const response = {
+    const { ResetUnavailableError } = await import(
+      "./src/modules/auth/password-reset.errors.js"
+    );
+    const createResponse = () => ({
       body: null,
       statusCode: null,
       json(payload) {
@@ -1349,13 +1490,16 @@ function checkProductionErrorMiddleware() {
         this.statusCode = statusCode;
         return this;
       },
-    };
+    });
+    const unexpectedResponse = createResponse();
     const error = new Error("Sensitive database detail");
     error.errors = {
       query: "Sensitive query detail",
     };
-    errorMiddleware(error, {}, response, () => {});
-    process.stdout.write(JSON.stringify(response));
+    errorMiddleware(error, {}, unexpectedResponse, () => {});
+    const unavailableResponse = createResponse();
+    errorMiddleware(new ResetUnavailableError(), {}, unavailableResponse, () => {});
+    process.stdout.write(JSON.stringify({ unexpectedResponse, unavailableResponse }));
   `;
   const output = execFileSync(process.execPath, ["--input-type=module", "--eval", script], {
     cwd: process.cwd(),
@@ -1369,11 +1513,16 @@ function checkProductionErrorMiddleware() {
     },
     encoding: "utf8",
   });
-  const response = JSON.parse(output);
+  const { unexpectedResponse, unavailableResponse } = JSON.parse(output);
 
-  assert.equal(response.statusCode, 500);
-  assert.deepEqual(response.body, {
+  assert.equal(unexpectedResponse.statusCode, 500);
+  assert.deepEqual(unexpectedResponse.body, {
     message: "Internal server error",
+  });
+  assert.equal(unavailableResponse.statusCode, 503);
+  assert.deepEqual(unavailableResponse.body, {
+    message: "Password reset is temporarily unavailable. Please try again later.",
+    code: "RESET_UNAVAILABLE",
   });
 }
 
@@ -1449,6 +1598,9 @@ checkPasswordResetTokenAndProxyPolicy();
 await checkForgotPasswordRateLimit();
 await checkPasswordResetEmailAdapters();
 await checkPasswordResetService();
+checkResetPasswordValidation();
+await checkResetPasswordConsumption();
+await checkMongoTransactionRunner();
 checkPasswordResetEnvironmentValidation();
 checkProductionErrorMiddleware();
 await checkServiceMalformedIdFallbacks();

@@ -62,3 +62,13 @@ export async function deletePasswordResetTokensByUserId(userId) {
   const result = await getPasswordResetTokensCollection().deleteMany({ userId: _id });
   return result.deletedCount;
 }
+
+export async function claimUnexpiredPasswordResetToken(tokenHash, now, { session }) {
+  return getPasswordResetTokensCollection().findOneAndDelete(
+    {
+      tokenHash,
+      expiresAt: { $gt: now },
+    },
+    { session },
+  );
+}
