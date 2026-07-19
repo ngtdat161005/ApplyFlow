@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -15,6 +16,7 @@ import {
   getEventListFromResponse,
   updateApplicationEvent,
 } from '../../api/event.api.js';
+import { applicationKeys, dashboardKeys } from '../../app/query-client.js';
 import { ApplicationOverview } from '../../features/applications/components/ApplicationOverview.jsx';
 import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
 import { EventForm } from '../../features/events/components/EventForm.jsx';
@@ -24,12 +26,10 @@ import { getErrorMessage } from '../../features/auth/auth.utils.js';
 export default function ApplicationDetailPage() {
   const { applicationId } = useParams();
   const navigate = useNavigate();
-  const [application, setApplication] = useState(null);
+  const queryClient = useQueryClient();
   const [applicationActionError, setApplicationActionError] = useState('');
-  const [applicationError, setApplicationError] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [isApplicationDeleteConfirmOpen, setIsApplicationDeleteConfirmOpen] = useState(false);
-  const [isApplicationDeleting, setIsApplicationDeleting] = useState(false);
   const [isApplicationEditFormOpen, setIsApplicationEditFormOpen] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState('');
   const [editingEventId, setEditingEventId] = useState('');
@@ -39,33 +39,12 @@ export default function ApplicationDetailPage() {
   const [isEventsLoading, setIsEventsLoading] = useState(true);
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState('');
   const applicationDeleteInFlightRef = useRef(false);
-  const applicationRequestIdRef = useRef(0);
   const eventDeleteInFlightRef = useRef('');
   const eventsRequestIdRef = useRef(0);
 
-  const currentApplication =
-    application && String(application._id) === applicationId ? application : null;
-  const currentApplicationError =
-    applicationError?.applicationId === applicationId ? applicationError : null;
-
-  const loadApplication = useCallback(async () => {
-    const requestId = applicationRequestIdRef.current + 1;
-    applicationRequestIdRef.current = requestId;
-
-    if (!applicationId) {
-      setApplication(null);
-      setApplicationError({
-        applicationId,
-        message: 'Application ID is missing.',
-        status: 400,
-      });
-      return;
-    }
-
-    setApplication(null);
-    setApplicationError(null);
-
-    try {
+  const applicationQuery = useQuery({
+    queryKey: applicationKeys.detail(applicationId),
+    queryFn: async () => {
       const response = await getApplication(applicationId);
       const loadedApplication = getApplicationFromResponse(response);
 
@@ -73,24 +52,83 @@ export default function ApplicationDetailPage() {
         throw new Error('Application response did not include an application.');
       }
 
-      if (requestId !== applicationRequestIdRef.current) {
-        return;
+      return loadedApplication;
+    },
+    enabled: Boolean(applicationId),
+  });
+
+  const updateApplicationMutation = useMutation({
+    mutationFn: async (payload) => {
+      const response = await updateApplication(applicationId, payload);
+      const updatedApplication = getApplicationFromResponse(response);
+
+      if (!updatedApplication) {
+        throw new Error('Update application response did not include an application.');
       }
 
-      setApplication(loadedApplication);
-    } catch (error) {
-      if (requestId !== applicationRequestIdRef.current) {
-        return;
-      }
+      return updatedApplication;
+    },
+    onSuccess: async (updatedApplication) => {
+      setApplicationActionError('');
+      setIsApplicationDeleteConfirmOpen(false);
+      setIsApplicationEditFormOpen(false);
 
-      setApplication(null);
-      setApplicationError({
-        applicationId,
-        message: getErrorMessage(error, 'Unable to load application.'),
-        status: error?.status,
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: applicationKeys.detail(updatedApplication._id),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: applicationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+  });
+
+  const deleteApplicationMutation = useMutation({
+    mutationFn: () => deleteApplication(applicationId),
+    onMutate: () => {
+      setApplicationActionError('');
+    },
+    onSuccess: async () => {
+      queryClient.removeQueries({
+        queryKey: applicationKeys.detail(applicationId),
       });
-    }
-  }, [applicationId]);
+
+      setEvents([]);
+      setIsApplicationDeleteConfirmOpen(false);
+      setIsApplicationEditFormOpen(false);
+      setIsCreateFormOpen(false);
+      navigate('/applications', { replace: true });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: applicationKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+    onError: (error) => {
+      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+    },
+  });
+
+  const currentApplication =
+    applicationQuery.data && String(applicationQuery.data._id) === applicationId
+      ? applicationQuery.data
+      : null;
+  const applicationQueryError = applicationQuery.isError
+    ? {
+        applicationId,
+        message: getErrorMessage(applicationQuery.error, 'Unable to load application.'),
+        status: applicationQuery.error?.status,
+      }
+    : null;
+  const missingApplicationError = applicationId
+    ? null
+    : {
+        applicationId,
+        message: 'Application ID is missing.',
+        status: 400,
+      };
+  const currentApplicationError = applicationQueryError || missingApplicationError;
 
   const loadEvents = useCallback(async () => {
     const requestId = eventsRequestIdRef.current + 1;
@@ -135,21 +173,18 @@ export default function ApplicationDetailPage() {
     setDeletingEventId('');
     setEditingEventId('');
     setIsApplicationDeleteConfirmOpen(false);
-    setIsApplicationDeleting(false);
     setIsApplicationEditFormOpen(false);
     setIsCreateFormOpen(false);
     setPendingDeleteEventId('');
     applicationDeleteInFlightRef.current = false;
     eventDeleteInFlightRef.current = '';
 
-    loadApplication();
     loadEvents();
 
     return () => {
-      applicationRequestIdRef.current += 1;
       eventsRequestIdRef.current += 1;
     };
-  }, [loadApplication, loadEvents]);
+  }, [loadEvents]);
 
   async function handleCreateEvent(payload) {
     const response = await createApplicationEvent(applicationId, payload);
@@ -167,19 +202,7 @@ export default function ApplicationDetailPage() {
   }
 
   async function handleUpdateApplication(payload) {
-    const response = await updateApplication(applicationId, payload);
-    const updatedApplication = getApplicationFromResponse(response);
-
-    if (!updatedApplication) {
-      throw new Error('Update application response did not include an application.');
-    }
-
-    setApplication(updatedApplication);
-    setApplicationActionError('');
-    setIsApplicationDeleteConfirmOpen(false);
-    setIsApplicationEditFormOpen(false);
-
-    return updatedApplication;
+    return updateApplicationMutation.mutateAsync(payload);
   }
 
   async function handleDeleteApplication() {
@@ -188,22 +211,13 @@ export default function ApplicationDetailPage() {
     }
 
     applicationDeleteInFlightRef.current = true;
-    setIsApplicationDeleting(true);
-    setApplicationActionError('');
 
     try {
-      await deleteApplication(applicationId);
-      setApplication(null);
-      setEvents([]);
-      setIsApplicationDeleteConfirmOpen(false);
-      setIsApplicationEditFormOpen(false);
-      setIsCreateFormOpen(false);
-      navigate('/applications', { replace: true });
-    } catch (error) {
-      setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+      await deleteApplicationMutation.mutateAsync();
+    } catch {
+      // The mutation callback owns the visible delete error state.
     } finally {
       applicationDeleteInFlightRef.current = false;
-      setIsApplicationDeleting(false);
     }
   }
 
@@ -245,7 +259,11 @@ export default function ApplicationDetailPage() {
     }
   }
 
-  const isPageLoading = !currentApplication && !currentApplicationError;
+  const hasResolvedApplication = applicationQuery.data !== undefined;
+  const isPageLoading = applicationQuery.isPending && Boolean(applicationId);
+  const isApplicationUpdating = applicationQuery.isFetching && hasResolvedApplication;
+  const initialApplicationError = currentApplication ? null : currentApplicationError;
+  const backgroundApplicationError = currentApplication ? currentApplicationError : null;
   const isApplicationUnavailable = [400, 404].includes(currentApplicationError?.status);
 
   return (
@@ -279,18 +297,34 @@ export default function ApplicationDetailPage() {
         </section>
       ) : null}
 
-      {currentApplicationError && isApplicationUnavailable ? (
+      {initialApplicationError && isApplicationUnavailable ? (
         <section className="applications-state application-detail-state-unavailable" role="alert">
           <h3>Application unavailable</h3>
-          <p>{currentApplicationError.message}</p>
+          <p>{initialApplicationError.message}</p>
         </section>
       ) : null}
 
-      {currentApplicationError && !isApplicationUnavailable ? (
+      {initialApplicationError && !isApplicationUnavailable ? (
         <section className="applications-state applications-state-error" role="alert">
           <h3>Could not load application</h3>
-          <p>{currentApplicationError.message}</p>
-          <button type="button" onClick={loadApplication}>
+          <p>{initialApplicationError.message}</p>
+          <button type="button" onClick={() => applicationQuery.refetch()}>
+            Retry
+          </button>
+        </section>
+      ) : null}
+
+      {isApplicationUpdating ? (
+        <p className="page-muted" role="status">
+          Updating application...
+        </p>
+      ) : null}
+
+      {backgroundApplicationError ? (
+        <section className="applications-state applications-state-error" role="alert">
+          <h3>Could not update application</h3>
+          <p>{backgroundApplicationError.message}</p>
+          <button type="button" onClick={() => applicationQuery.refetch()}>
             Retry
           </button>
         </section>
@@ -301,7 +335,7 @@ export default function ApplicationDetailPage() {
           <ApplicationOverview
             application={currentApplication}
             isConfirmingDelete={isApplicationDeleteConfirmOpen}
-            isDeleting={isApplicationDeleting}
+            isDeleting={deleteApplicationMutation.isPending}
             onCancelDelete={() => setIsApplicationDeleteConfirmOpen(false)}
             onConfirmDelete={handleDeleteApplication}
             onEdit={() => {
@@ -335,7 +369,7 @@ export default function ApplicationDetailPage() {
                 <p>Update company, role, status, source, notes, and follow-up date.</p>
               </div>
               <ApplicationForm
-                application={application}
+                application={currentApplication}
                 mode="edit"
                 onCancel={() => setIsApplicationEditFormOpen(false)}
                 onSubmit={handleUpdateApplication}
