@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -33,14 +33,10 @@ export default function ApplicationDetailPage() {
   const [isApplicationEditFormOpen, setIsApplicationEditFormOpen] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState('');
   const [editingEventId, setEditingEventId] = useState('');
-  const [events, setEvents] = useState([]);
-  const [eventsError, setEventsError] = useState('');
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
-  const [isEventsLoading, setIsEventsLoading] = useState(true);
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState('');
   const applicationDeleteInFlightRef = useRef(false);
   const eventDeleteInFlightRef = useRef('');
-  const eventsRequestIdRef = useRef(0);
 
   const applicationQuery = useQuery({
     queryKey: applicationKeys.detail(applicationId),
@@ -53,6 +49,15 @@ export default function ApplicationDetailPage() {
       }
 
       return loadedApplication;
+    },
+    enabled: Boolean(applicationId),
+  });
+
+  const eventsQuery = useQuery({
+    queryKey: applicationKeys.events(applicationId),
+    queryFn: async () => {
+      const response = await getApplicationEvents(applicationId);
+      return getEventListFromResponse(response);
     },
     enabled: Boolean(applicationId),
   });
@@ -94,7 +99,6 @@ export default function ApplicationDetailPage() {
         queryKey: applicationKeys.detail(applicationId),
       });
 
-      setEvents([]);
       setIsApplicationDeleteConfirmOpen(false);
       setIsApplicationEditFormOpen(false);
       setIsCreateFormOpen(false);
@@ -107,6 +111,82 @@ export default function ApplicationDetailPage() {
     },
     onError: (error) => {
       setApplicationActionError(getErrorMessage(error, 'Unable to delete application.'));
+    },
+  });
+
+  const createEventMutation = useMutation({
+    mutationFn: async (payload) => {
+      const response = await createApplicationEvent(applicationId, payload);
+      const createdEvent = getEventFromResponse(response);
+
+      if (!createdEvent) {
+        throw new Error('Create event response did not include an event.');
+      }
+
+      return createdEvent;
+    },
+    onSuccess: async () => {
+      setIsCreateFormOpen(false);
+      setDeleteError('');
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: applicationKeys.events(applicationId),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+  });
+
+  const updateEventMutation = useMutation({
+    mutationFn: async ({ eventId, payload }) => {
+      const response = await updateApplicationEvent(applicationId, eventId, payload);
+      const updatedEvent = getEventFromResponse(response);
+
+      if (!updatedEvent) {
+        throw new Error('Update event response did not include an event.');
+      }
+
+      return updatedEvent;
+    },
+    onSuccess: async () => {
+      setEditingEventId('');
+      setDeleteError('');
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: applicationKeys.events(applicationId),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+  });
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (event) => deleteApplicationEvent(applicationId, event._id),
+    onMutate: (event) => {
+      setDeletingEventId(event._id);
+      setDeleteError('');
+    },
+    onSuccess: async () => {
+      setPendingDeleteEventId('');
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: applicationKeys.events(applicationId),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.summary() }),
+      ]);
+    },
+    onError: (error) => {
+      setDeleteError(getErrorMessage(error, 'Unable to delete event.'));
+    },
+    onSettled: () => {
+      eventDeleteInFlightRef.current = '';
+      setDeletingEventId('');
     },
   });
 
@@ -130,43 +210,6 @@ export default function ApplicationDetailPage() {
       };
   const currentApplicationError = applicationQueryError || missingApplicationError;
 
-  const loadEvents = useCallback(async () => {
-    const requestId = eventsRequestIdRef.current + 1;
-    eventsRequestIdRef.current = requestId;
-
-    if (!applicationId) {
-      setEvents([]);
-      setEventsError('Application ID is missing.');
-      setIsEventsLoading(false);
-      return;
-    }
-
-    setEvents([]);
-    setIsEventsLoading(true);
-    setEventsError('');
-
-    try {
-      const response = await getApplicationEvents(applicationId);
-
-      if (requestId !== eventsRequestIdRef.current) {
-        return;
-      }
-
-      setEvents(getEventListFromResponse(response));
-    } catch (error) {
-      if (requestId !== eventsRequestIdRef.current) {
-        return;
-      }
-
-      setEvents([]);
-      setEventsError(getErrorMessage(error, 'Unable to load events.'));
-    } finally {
-      if (requestId === eventsRequestIdRef.current) {
-        setIsEventsLoading(false);
-      }
-    }
-  }, [applicationId]);
-
   useEffect(() => {
     setApplicationActionError('');
     setDeleteError('');
@@ -178,27 +221,10 @@ export default function ApplicationDetailPage() {
     setPendingDeleteEventId('');
     applicationDeleteInFlightRef.current = false;
     eventDeleteInFlightRef.current = '';
-
-    loadEvents();
-
-    return () => {
-      eventsRequestIdRef.current += 1;
-    };
-  }, [loadEvents]);
+  }, [applicationId]);
 
   async function handleCreateEvent(payload) {
-    const response = await createApplicationEvent(applicationId, payload);
-    const createdEvent = getEventFromResponse(response);
-
-    if (!createdEvent) {
-      throw new Error('Create event response did not include an event.');
-    }
-
-    setIsCreateFormOpen(false);
-    setDeleteError('');
-    await loadEvents();
-
-    return createdEvent;
+    return createEventMutation.mutateAsync(payload);
   }
 
   async function handleUpdateApplication(payload) {
@@ -222,18 +248,10 @@ export default function ApplicationDetailPage() {
   }
 
   async function handleUpdateEvent(event, payload) {
-    const response = await updateApplicationEvent(applicationId, event._id, payload);
-    const updatedEvent = getEventFromResponse(response);
-
-    if (!updatedEvent) {
-      throw new Error('Update event response did not include an event.');
-    }
-
-    setEditingEventId('');
-    setDeleteError('');
-    await loadEvents();
-
-    return updatedEvent;
+    return updateEventMutation.mutateAsync({
+      eventId: event._id,
+      payload,
+    });
   }
 
   async function handleDeleteEvent(event) {
@@ -242,20 +260,14 @@ export default function ApplicationDetailPage() {
     }
 
     eventDeleteInFlightRef.current = event._id;
-    setDeletingEventId(event._id);
-    setDeleteError('');
-
     try {
-      await deleteApplicationEvent(applicationId, event._id);
-      setPendingDeleteEventId('');
-      setEvents((currentEvents) => currentEvents.filter((currentEvent) => currentEvent._id !== event._id));
-    } catch (error) {
-      setDeleteError(getErrorMessage(error, 'Unable to delete event.'));
+      await deleteEventMutation.mutateAsync(event);
+    } catch {
+      // The mutation callback owns the visible delete error state.
     } finally {
       if (eventDeleteInFlightRef.current === event._id) {
         eventDeleteInFlightRef.current = '';
       }
-      setDeletingEventId('');
     }
   }
 
@@ -265,6 +277,15 @@ export default function ApplicationDetailPage() {
   const initialApplicationError = currentApplication ? null : currentApplicationError;
   const backgroundApplicationError = currentApplication ? currentApplicationError : null;
   const isApplicationUnavailable = [400, 404].includes(currentApplicationError?.status);
+  const events = eventsQuery.data || [];
+  const eventsQueryError = eventsQuery.isError
+    ? getErrorMessage(eventsQuery.error, 'Unable to load events.')
+    : '';
+  const hasResolvedEvents = eventsQuery.data !== undefined;
+  const initialEventsError = hasResolvedEvents ? '' : eventsQueryError;
+  const backgroundEventsError = hasResolvedEvents ? eventsQueryError : '';
+  const isEventsLoading = eventsQuery.isPending && Boolean(applicationId);
+  const isEventsUpdating = eventsQuery.isFetching && hasResolvedEvents;
 
   return (
     <section className="page-section application-detail-page" aria-labelledby="application-detail-title">
@@ -408,6 +429,22 @@ export default function ApplicationDetailPage() {
             </section>
           ) : null}
 
+          {isEventsUpdating ? (
+            <p className="page-muted" role="status">
+              Updating events...
+            </p>
+          ) : null}
+
+          {backgroundEventsError ? (
+            <section className="applications-state applications-state-error" role="alert">
+              <h4>Could not update events</h4>
+              <p>{backgroundEventsError}</p>
+              <button type="button" onClick={() => eventsQuery.refetch()}>
+                Retry
+              </button>
+            </section>
+          ) : null}
+
           <EventTimeline
             deleteError={deleteError}
             deletingEventId={deletingEventId}
@@ -415,7 +452,7 @@ export default function ApplicationDetailPage() {
             events={events}
             isDeleteConfirmOpenFor={pendingDeleteEventId}
             isLoading={isEventsLoading}
-            loadError={eventsError}
+            loadError={initialEventsError}
             onCancelDelete={() => setPendingDeleteEventId('')}
             onCancelEdit={() => setEditingEventId('')}
             onConfirmDelete={handleDeleteEvent}
@@ -434,7 +471,7 @@ export default function ApplicationDetailPage() {
               setEditingEventId('');
               setPendingDeleteEventId(event._id);
             }}
-            onRetry={loadEvents}
+            onRetry={() => eventsQuery.refetch()}
             onUpdate={handleUpdateEvent}
           />
         </section>
