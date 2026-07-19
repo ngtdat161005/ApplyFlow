@@ -1,7 +1,7 @@
 import { config } from "../../config/env.js";
 import { logger } from "../../shared/logger.js";
 import { findUserByEmail } from "./auth.repository.js";
-import { sendPasswordResetEmail } from "./password-reset-email.adapter.js";
+import { sendPasswordResetEmail } from "../../services/email/password-reset-email.adapter.js";
 import {
   createPasswordResetUrl,
   createRawPasswordResetToken,

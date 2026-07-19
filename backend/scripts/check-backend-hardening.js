@@ -57,7 +57,7 @@ const { createForgotPasswordRateLimitMiddleware } = await import(
   "../src/middlewares/forgot-password-rate-limit.middleware.js"
 );
 const { createPasswordResetEmailSender } = await import(
-  "../src/modules/auth/password-reset-email.adapter.js"
+  "../src/services/email/password-reset-email.adapter.js"
 );
 const { createPasswordResetRequester } = await import(
   "../src/modules/auth/password-reset.service.js"
