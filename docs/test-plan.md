@@ -2,6 +2,8 @@
 
 This plan defines the default checks for V2 branches. Add task-specific checks in the PR when a change touches behavior not covered here.
 
+Recorded V2 execution evidence and the reusable future-run template are in [v2-test-evidence.md](v2-test-evidence.md).
+
 ## V2-02 Strategy Notes
 
 V2-01 verified source-level implementation evidence and ran the safe local checks, but it did not run backend HTTP E2E, browser/manual regression, or inspect remote CI results. Later task reports must keep those areas separate from the verified baseline until they are actually executed.
