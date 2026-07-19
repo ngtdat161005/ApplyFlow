@@ -1,118 +1,92 @@
 # ApplyFlow
 
-ApplyFlow la ung dung web ca nhan dung de theo doi qua trinh ung tuyen internship/job. V1 tap trung vao bon luong chinh: xac thuc nguoi dung, quan ly application, timeline event va dashboard voi cac muc can chu y.
+ApplyFlow is a private internship and job application tracker. It helps one authenticated user record applications, recruitment events, follow-up dates, upcoming events, and attention-needed cases.
 
-## 1. Muc Tieu
+V2 is a controlled quality pass over the original project. It focuses on backend contract safety, ownership isolation, predictable validation, reliable frontend states, and honest QA evidence rather than adding large new features.
 
-- Luu thong tin cong ty, vi tri, trang thai ung tuyen va ghi chu.
-- Theo doi cac su kien theo tung application: applied, HR call, OA, interview, follow-up, offer, rejected va note.
-- Hien thi dashboard tong quan: tong so application, thong ke theo trang thai, su kien sap toi va attention flags.
-- Tach ro backend API va frontend SPA de de phat trien, kiem thu va review.
+## Technology
 
-## 2. Cong Nghe
-
-| Thanh phan | Cong nghe |
+| Area | Technology |
 |---|---|
 | Backend | Node.js, Express, MongoDB native driver |
-| Frontend | React, Vite |
-| Auth | JWT, bcrypt |
+| Frontend | React, Vite, React Router, plain CSS |
+| Authentication | JWT, bcrypt |
 | Database | MongoDB |
 
-## 3. Cau Truc Thu Muc
+The repository contains separate `backend/` and `frontend/` applications plus specifications, QA plans, and release evidence under `docs/`.
 
-```text
-ApplyFlow/
-├─ backend/
-│  ├─ scripts/      # Lightweight check scripts
-│  └─ src/          # Express app, routes, modules, domain logic
-├─ frontend/
-│  ├─ docs/         # Manual frontend testcases
-│  └─ src/          # React app, pages, features, API clients
-├─ docs/            # Specification, architecture, task plan
-├─ .env.example
-└─ README.md
-```
+## Prerequisites
 
-Tai lieu chi tiet:
+- Node.js `^20.19.0` or `>=22.12.0`
+- npm
+- Git
+- a local or remote MongoDB instance
 
-- `docs/ApplyFlow Specification.md`: hanh vi san pham.
-- `docs/ApplyFlow Architecture.md`: ranh gioi ky thuat va cach to chuc code.
-- `docs/ApplyFlow Tasks.md`: pham vi va thu tu task.
-- `frontend/docs/manual-frontend-testcases.md`: testcase thu cong cho frontend V1.
+MongoDB is not bundled with ApplyFlow. Use a database intended for local development or disposable testing, never production or personal data.
 
-## 4. Yeu Cau He Thong
-
-- Node.js 18+.
-- npm.
-- MongoDB dang chay local hoac remote.
-- Git.
-
-## 5. Cai Dat Moi Truong
-
-Clone du an va cai dependencies rieng cho tung app:
+## Install
 
 ```bash
 git clone <repo-url>
 cd ApplyFlow
+
 cd backend
-npm install
+npm ci
+
 cd ../frontend
-npm install
+npm ci
 ```
 
-Tao file `.env` o root hoac trong `backend/` dua tren `.env.example`:
+## Environment
+
+Use the root [`.env.example`](.env.example) as a reference. Do not commit real secrets.
+
+The backend requires:
 
 ```env
 PORT=4000
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB_NAME=ApplyFlow
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DB_NAME=applyflow_dev
 JWT_SECRET=replace-with-a-local-development-secret
+```
+
+When started from `backend/`, the backend reads the root `.env` and then `backend/.env` without overriding values already loaded.
+
+The frontend can optionally use `frontend/.env`:
+
+```env
 VITE_API_BASE_URL=http://localhost:4000
 ```
 
-Ghi chu:
+Without `VITE_API_BASE_URL`, the Vite development server proxies `/api` and `/auth` requests to `http://127.0.0.1:4000`.
 
-- Backend se doc bien moi truong tu root `.env` hoac `backend/.env`.
-- Neu chay frontend bang Vite dev server va khong set `VITE_API_BASE_URL`, Vite proxy se chuyen mot so request ve `http://127.0.0.1:4000`.
-- Nen dung database rieng cho moi truong dev/test de tranh lam hong du lieu that.
+## Run Locally
 
-## 6. Chay Du An
-
-Chay backend:
+Start MongoDB through your existing local or remote setup, then start the backend:
 
 ```bash
 cd backend
 npm run dev
 ```
 
-Backend chi listen sau khi ket noi MongoDB thanh cong. Kiem tra API:
+The API listens only after connecting to MongoDB. Verify it at:
 
 ```bash
 curl http://localhost:4000/health
 ```
 
-Ket qua hop le:
-
-```json
-{
-  "success": true,
-  "message": "ApplyFlow API is running",
-  "environment": "development"
-}
-```
-
-Chay frontend trong terminal khac:
+In another terminal, start the frontend:
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Mo URL Vite in ra trong terminal, thuong la `http://localhost:5173`.
+Open the URL printed by Vite, normally `http://localhost:5173`.
 
-## 7. Kiem Thu Va Kiem Tra
+## Verification
 
-Backend:
+### Backend checks
 
 ```bash
 cd backend
@@ -121,52 +95,72 @@ npm run check:backend-hardening
 node --check scripts/check-backend-e2e.js
 ```
 
-Kiem tra E2E backend qua HTTP:
+- `check:attention` verifies focused attention and timeline domain rules.
+- `check:backend-hardening` verifies focused validation, error, ownership-filter, and contract assertions.
+- `node --check` verifies only that the E2E script parses; it does not execute HTTP scenarios.
+
+### Live backend E2E
+
+E2E requires a running ApplyFlow backend connected to a disposable MongoDB database:
 
 ```bash
 cd backend
 npm run check:e2e
 ```
 
-Dieu kien: backend phai dang chay va ket noi MongoDB thanh cong. Mac dinh script goi `http://127.0.0.1:4000`; co the doi bang:
+The default backend origin is `http://127.0.0.1:4000`. To use another origin:
 
-```bash
-APPLYFLOW_BACKEND_ORIGIN=http://localhost:4000 npm run check:e2e
+```powershell
+$env:APPLYFLOW_BACKEND_ORIGIN = "http://localhost:4000"
+npm run check:e2e
 ```
 
-Frontend:
+The script creates run-specific users, applications, and events. It removes current-run applications and their events where the API permits, but successful users remain because ApplyFlow has no user-delete endpoint.
+
+### Frontend build
 
 ```bash
 cd frontend
 npm run build
 ```
 
-Test thu cong frontend theo:
+A successful build proves the frontend compiles into a production bundle. It does not prove live API integration, browser behavior, responsive layout, or every manual testcase.
 
-```text
-frontend/docs/manual-frontend-testcases.md
-```
+### Manual regression and evidence
 
-## 8. API Chinh
+- [Canonical frontend manual regression checklist](frontend/docs/manual-frontend-testcases.md)
+- [V2 test plan](docs/test-plan.md)
+- [Recorded V2 test evidence](docs/v2-test-evidence.md)
+- [Regression risk checklist](docs/regression-checklist.md)
 
-| Nhom | Endpoint |
+The recorded full V2 checkpoint accounted for 101 unique manual testcase IDs: 79 PASS, 19 BLOCKED, and 3 NOT APPLICABLE. It did not report all 101 cases as passed. See the evidence document for the tested commit, blocked IDs, environment, cleanup, and limitations.
+
+## Continuous Integration
+
+GitHub Actions runs on pull requests and pushes to `main`.
+
+- Backend CI installs dependencies and runs `check:attention` plus `check:backend-hardening`.
+- Frontend CI installs dependencies and runs the production build.
+- Live MongoDB-backed E2E and browser/manual regression are not run in the current no-secret CI workflow.
+
+## Main API Routes
+
+| Area | Routes |
 |---|---|
 | Health | `GET /health` |
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Applications | `GET /applications`, `POST /applications`, `GET/PATCH/DELETE /applications/:applicationId` |
+| Authentication | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Applications | `GET/POST /applications`, `GET/PATCH/DELETE /applications/:applicationId` |
 | Events | `GET/POST /applications/:applicationId/events`, `PATCH/DELETE /applications/:applicationId/events/:eventId` |
 | Dashboard | `GET /dashboard/summary` |
 
-Tat ca endpoint application, event va dashboard yeu cau JWT bearer token.
+Application, event, and dashboard routes require a JWT bearer token and return only data scoped to the authenticated user.
 
-## 9. Gioi Han V1
+## Known Limitations
 
-- Chua co user-delete endpoint; tai khoan test co the con lai trong database.
-- Frontend V1 duoc kiem thu bang manual testcase va build check, chua co framework E2E nhu Playwright/Cypress.
-- Backend E2E script tao user/application/event that tren database dang cau hinh, nen chi nen chay voi database dev/test.
+- No user-delete endpoint; disposable test users can remain in the selected database.
+- No automated frontend browser test framework is included.
+- Live E2E requires a running backend and disposable MongoDB database.
+- Some timing, stale-response, native datetime, and keyboard cases remained blocked or not applicable in the recorded browser checkpoint.
+- V2 does not include calendar week/month views, notifications, analytics/charts, email integration, or automatic application submission.
 
-## 10. Troubleshooting
-
-- Neu backend khong start, kiem tra `MONGODB_URI`, `MONGODB_DB_NAME` va MongoDB server.
-- Neu frontend bao khong goi duoc API, kiem tra backend co dang chay o port 4000 khong va gia tri `VITE_API_BASE_URL`.
-- Neu remote MongoDB host khong resolve duoc, sua DNS/network tren may chay app; khong hard-code DNS trong source code.
+For product and architecture details, see [ApplyFlow Specification](docs/ApplyFlow%20Specification.md), [ApplyFlow Architecture](docs/ApplyFlow%20Architecture.md), and [V2 Specification](docs/v2-spec.md).
