@@ -30,7 +30,7 @@ For V3 work, read and apply sources in this order:
 2. `docs/v3-spec.md` — behavior explicitly added or changed by V3.
 3. `docs/v3-tasks.md` — task scope, dependency order, branch/PR workflow, merge policy, and human-approval gates.
 4. `docs/v2-spec.md` — all finalized V2 contracts not explicitly changed by V3.
-5. `docs/ApplyFlow Specification.md` — V1 product/domain baseline where V2/V3 are silent.
+5. `docs/v1-spec.md` — V1 product/domain baseline where V2/V3 are silent.
 6. `docs/ApplyFlow Architecture.md` — existing architecture until an assigned V3 task intentionally updates it.
 7. `docs/test-plan.md` and `docs/regression-checklist.md` — verification procedure and evidence classification.
 

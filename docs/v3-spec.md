@@ -37,7 +37,7 @@ Source-of-truth order for V3 work:
 2. `docs/v3-spec.md` controls behavior explicitly added or changed by V3.
 3. `docs/v3-tasks.md` controls task order, branch/PR scope, merge gates, and human-approval checkpoints.
 4. `docs/v2-spec.md` controls all finalized V2 product, API, validation, privacy, and frontend contracts not changed here.
-5. `docs/ApplyFlow Specification.md` controls the underlying V1 product/domain baseline where V2 and V3 are silent.
+5. `docs/v1-spec.md` controls the underlying V1 product/domain baseline where V2 and V3 are silent.
 6. `docs/ApplyFlow Architecture.md` controls existing architecture until a V3 task intentionally updates it.
 7. `docs/test-plan.md` and `docs/regression-checklist.md` control verification procedure and evidence classification.
 

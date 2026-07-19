@@ -10,7 +10,7 @@
   - `.codex/skills/applyflow-test-designer/SKILL.md`
   - `docs/v2-spec.md`
   - `docs/v2-tasks.md`
-  - `docs/ApplyFlow Specification.md`
+  - `docs/v1-spec.md`
   - `docs/ApplyFlow Architecture.md`
   - `docs/test-plan.md`
   - `docs/regression-checklist.md`

@@ -163,4 +163,4 @@ Application, event, and dashboard routes require a JWT bearer token and return o
 - Some timing, stale-response, native datetime, and keyboard cases remained blocked or not applicable in the recorded browser checkpoint.
 - V2 does not include calendar week/month views, notifications, analytics/charts, email integration, or automatic application submission.
 
-For product and architecture details, see [ApplyFlow Specification](docs/ApplyFlow%20Specification.md), [ApplyFlow Architecture](docs/ApplyFlow%20Architecture.md), and [V2 Specification](docs/v2-spec.md).
+For product and architecture details, see [V1 Specification](docs/v1-spec.md), [ApplyFlow Architecture](docs/ApplyFlow%20Architecture.md), and [V2 Specification](docs/v2-spec.md).

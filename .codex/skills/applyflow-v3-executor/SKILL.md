@@ -7,7 +7,7 @@ description: Execute, review, publish, and orchestrate ApplyFlow V3 tasks using 
 
 ## Authority
 
-Read `AGENTS.md`, `docs/v3-spec.md`, and the complete current task entry in `docs/v3-tasks.md` before V3 work. Load `docs/v2-spec.md`, `docs/ApplyFlow Specification.md`, `docs/ApplyFlow Architecture.md`, `docs/test-plan.md`, and `docs/regression-checklist.md` only as required by the task and risk.
+Read `AGENTS.md`, `docs/v3-spec.md`, and the complete current task entry in `docs/v3-tasks.md` before V3 work. Load `docs/v2-spec.md`, `docs/v1-spec.md`, `docs/ApplyFlow Architecture.md`, `docs/test-plan.md`, and `docs/regression-checklist.md` only as required by the task and risk.
 
 This skill is procedural only. Canonical product, architecture, task order, merge, and stop rules remain owned by the repository documents.
 
