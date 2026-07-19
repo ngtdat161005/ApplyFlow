@@ -5,6 +5,7 @@ import { errorMiddleware, notFoundHandler } from "./middlewares/error.middleware
 export function createApp() {
   const app = express();
 
+  app.set("trust proxy", false);
   app.use(express.json());
 
   app.use(routes);
