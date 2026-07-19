@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import {
   getDashboardSummary,
   getDashboardSummaryFromResponse,
 } from '../../api/dashboard.api.js';
+import { dashboardKeys } from '../../app/query-client.js';
 import { AttentionFlagsPanel } from '../../features/dashboard/components/AttentionFlagsPanel.jsx';
 import { DashboardSummaryCards } from '../../features/dashboard/components/DashboardSummaryCards.jsx';
 import { RecentApplicationsPanel } from '../../features/dashboard/components/RecentApplicationsPanel.jsx';
@@ -14,55 +15,28 @@ import { getErrorMessage } from '../../features/auth/auth.utils.js';
 import './DashboardPage.css';
 
 export default function DashboardPage() {
-  const [summary, setSummary] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const requestIdRef = useRef(0);
-  const requestPendingRef = useRef(false);
-
-  const loadDashboardSummary = useCallback(async () => {
-    if (requestPendingRef.current) {
-      return;
-    }
-
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    requestPendingRef.current = true;
-    setIsLoading(true);
-    setLoadError('');
-    setSummary(null);
-
-    try {
+  const dashboardQuery = useQuery({
+    queryKey: dashboardKeys.summary(),
+    queryFn: async () => {
       const response = await getDashboardSummary();
+      return getDashboardSummaryFromResponse(response);
+    },
+  });
 
-      if (requestId === requestIdRef.current) {
-        setSummary(getDashboardSummaryFromResponse(response));
-      }
-    } catch (error) {
-      if (requestId === requestIdRef.current) {
-        setLoadError(getErrorMessage(error, 'Unable to load dashboard summary.'));
-      }
-    } finally {
-      if (requestId === requestIdRef.current) {
-        requestPendingRef.current = false;
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDashboardSummary();
-
-    return () => {
-      requestIdRef.current += 1;
-      requestPendingRef.current = false;
-    };
-  }, [loadDashboardSummary]);
+  const summary = dashboardQuery.data;
+  const queryError = dashboardQuery.isError
+    ? getErrorMessage(dashboardQuery.error, 'Unable to load dashboard summary.')
+    : '';
+  const hasResolvedSummary = dashboardQuery.data !== undefined;
+  const initialLoadError = hasResolvedSummary ? '' : queryError;
+  const backgroundLoadError = hasResolvedSummary ? queryError : '';
+  const isInitialLoading = dashboardQuery.isPending;
+  const isBackgroundFetching = dashboardQuery.isFetching && hasResolvedSummary;
 
   const hasNoApplications =
-    !isLoading && !loadError && summary?.totalApplications === 0;
+    !isInitialLoading && !initialLoadError && summary?.totalApplications === 0;
   const hasApplications =
-    !isLoading && !loadError && summary?.totalApplications > 0;
+    !isInitialLoading && !initialLoadError && summary?.totalApplications > 0;
 
   return (
     <section className="page-section dashboard-page" aria-labelledby="dashboard-title">
@@ -74,7 +48,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {isLoading ? (
+      {isInitialLoading ? (
         <section
           className="applications-state applications-state-loading dashboard-page-state"
           aria-live="polite"
@@ -85,14 +59,41 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      {loadError ? (
+      {initialLoadError ? (
         <section
           className="applications-state applications-state-error dashboard-page-state"
           role="alert"
         >
           <h3>Dashboard unavailable</h3>
-          <p>{loadError}</p>
-          <button disabled={isLoading} type="button" onClick={loadDashboardSummary}>
+          <p>{initialLoadError}</p>
+          <button
+            disabled={dashboardQuery.isFetching}
+            type="button"
+            onClick={() => dashboardQuery.refetch()}
+          >
+            Retry
+          </button>
+        </section>
+      ) : null}
+
+      {isBackgroundFetching ? (
+        <p className="page-muted" role="status">
+          Updating dashboard...
+        </p>
+      ) : null}
+
+      {backgroundLoadError ? (
+        <section
+          className="applications-state applications-state-error dashboard-page-state"
+          role="alert"
+        >
+          <h3>Could not update dashboard</h3>
+          <p>{backgroundLoadError}</p>
+          <button
+            disabled={dashboardQuery.isFetching}
+            type="button"
+            onClick={() => dashboardQuery.refetch()}
+          >
             Retry
           </button>
         </section>
