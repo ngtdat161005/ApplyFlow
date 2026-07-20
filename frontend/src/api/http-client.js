@@ -113,7 +113,13 @@ function getErrorDetails(payload) {
 }
 
 export async function httpRequest(path, options = {}) {
-  const { method = 'GET', body, headers = {}, auth = true } = options;
+  const {
+    method = 'GET',
+    body,
+    headers = {},
+    auth = true,
+    invalidateSessionOnUnauthorized = true,
+  } = options;
   const requestHeaders = new Headers(headers);
   const accessToken = auth ? getStoredAccessToken() : null;
 
@@ -142,7 +148,7 @@ export async function httpRequest(path, options = {}) {
   const payload = await readJsonResponse(response);
 
   if (!response.ok) {
-    if (auth && accessToken && response.status === 401) {
+    if (auth && accessToken && invalidateSessionOnUnauthorized && response.status === 401) {
       notifyUnauthorizedResponse(accessToken);
     }
 

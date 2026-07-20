@@ -5,6 +5,7 @@ import { useAuth } from '../../features/auth/auth.store.js';
 const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/applications', label: 'Applications' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 export function AppLayout() {

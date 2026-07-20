@@ -176,6 +176,12 @@ export function AuthProvider({ children }) {
     setBootstrapError(null);
   }, [clearSession]);
 
+  const completeAccountDeletion = useCallback(() => {
+    clearSession();
+    setAuthError(null);
+    setBootstrapError(null);
+  }, [clearSession]);
+
   const value = useMemo(
     () => ({
       user,
@@ -185,6 +191,7 @@ export function AuthProvider({ children }) {
       authError,
       bootstrapError,
       clearAuthError,
+      completeAccountDeletion,
       login,
       register,
       logout,
@@ -195,6 +202,7 @@ export function AuthProvider({ children }) {
       authError,
       bootstrapError,
       clearAuthError,
+      completeAccountDeletion,
       isLoading,
       login,
       logout,

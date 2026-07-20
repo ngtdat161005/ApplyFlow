@@ -9,6 +9,7 @@ import ForgotPasswordPage from '../pages/ForgotPasswordPage/ForgotPasswordPage.j
 import LoginPage from '../pages/LoginPage/LoginPage.jsx';
 import RegisterPage from '../pages/RegisterPage/RegisterPage.jsx';
 import ResetPasswordPage from '../pages/ResetPasswordPage/ResetPasswordPage.jsx';
+import SettingsPage from '../pages/SettingsPage/SettingsPage.jsx';
 import NotFoundPage from '../pages/NotFoundPage/NotFoundPage.jsx';
 
 export const router = createBrowserRouter([
@@ -54,6 +55,10 @@ export const router = createBrowserRouter([
           {
             path: '/applications/:applicationId',
             element: <ApplicationDetailPage />,
+          },
+          {
+            path: '/settings',
+            element: <SettingsPage />,
           },
         ],
       },
