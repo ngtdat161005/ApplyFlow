@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../features/auth/auth.store.js';
+import { AuthPresentation } from '../../features/auth/components/AuthPresentation.jsx';
 import {
   getErrorDetails,
   getErrorFieldErrors,
@@ -80,8 +81,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="auth-page">
-      <section className="auth-panel" aria-labelledby="login-title">
+    <AuthPresentation titleId="login-title" variant="login">
         <p className="app-eyebrow">ApplyFlow</p>
         <h1 id="login-title">Login</h1>
         <p className="page-muted">Sign in to manage your application tracker.</p>
@@ -110,6 +110,7 @@ export default function LoginPage() {
             Email
             <input
               autoComplete="email"
+              aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
               aria-invalid={Boolean(fieldErrors.email)}
               disabled={isSubmitting}
               name="email"
@@ -119,12 +120,17 @@ export default function LoginPage() {
               type="email"
               value={formValues.email}
             />
-            {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
+            {fieldErrors.email ? (
+              <span className="field-error" id="login-email-error">
+                {fieldErrors.email}
+              </span>
+            ) : null}
           </label>
           <label>
             Password
             <input
               autoComplete="current-password"
+              aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
               aria-invalid={Boolean(fieldErrors.password)}
               disabled={isSubmitting}
               name="password"
@@ -134,7 +140,11 @@ export default function LoginPage() {
               type="password"
               value={formValues.password}
             />
-            {fieldErrors.password ? <span className="field-error">{fieldErrors.password}</span> : null}
+            {fieldErrors.password ? (
+              <span className="field-error" id="login-password-error">
+                {fieldErrors.password}
+              </span>
+            ) : null}
           </label>
           <div className="auth-form-link">
             <Link to="/forgot-password">Forgot password?</Link>
@@ -147,7 +157,6 @@ export default function LoginPage() {
         <p className="auth-switch">
           Need an account? <Link to="/register">Register</Link>
         </p>
-      </section>
-    </main>
+    </AuthPresentation>
   );
 }
