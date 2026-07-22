@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../features/auth/auth.store.js';
+import { AuthPresentation } from '../../features/auth/components/AuthPresentation.jsx';
 import {
   getErrorDetails,
   getErrorFieldErrors,
@@ -81,8 +82,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="auth-page">
-      <section className="auth-panel" aria-labelledby="register-title">
+    <AuthPresentation titleId="register-title" variant="register">
         <p className="app-eyebrow">ApplyFlow</p>
         <h1 id="register-title">Register</h1>
         <p className="page-muted">Create an account for your application tracker.</p>
@@ -105,6 +105,9 @@ export default function RegisterPage() {
             Display name
             <input
               autoComplete="name"
+              aria-describedby={
+                fieldErrors.displayName ? 'register-display-name-error' : undefined
+              }
               aria-invalid={Boolean(fieldErrors.displayName)}
               disabled={isSubmitting}
               name="displayName"
@@ -115,13 +118,16 @@ export default function RegisterPage() {
               value={formValues.displayName}
             />
             {fieldErrors.displayName ? (
-              <span className="field-error">{fieldErrors.displayName}</span>
+              <span className="field-error" id="register-display-name-error">
+                {fieldErrors.displayName}
+              </span>
             ) : null}
           </label>
           <label>
             Email
             <input
               autoComplete="email"
+              aria-describedby={fieldErrors.email ? 'register-email-error' : undefined}
               aria-invalid={Boolean(fieldErrors.email)}
               disabled={isSubmitting}
               name="email"
@@ -131,12 +137,17 @@ export default function RegisterPage() {
               type="email"
               value={formValues.email}
             />
-            {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
+            {fieldErrors.email ? (
+              <span className="field-error" id="register-email-error">
+                {fieldErrors.email}
+              </span>
+            ) : null}
           </label>
           <label>
             Password
             <input
               autoComplete="new-password"
+              aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
               aria-invalid={Boolean(fieldErrors.password)}
               disabled={isSubmitting}
               minLength={8}
@@ -147,7 +158,11 @@ export default function RegisterPage() {
               type="password"
               value={formValues.password}
             />
-            {fieldErrors.password ? <span className="field-error">{fieldErrors.password}</span> : null}
+            {fieldErrors.password ? (
+              <span className="field-error" id="register-password-error">
+                {fieldErrors.password}
+              </span>
+            ) : null}
           </label>
           <button disabled={isSubmitting} type="submit">
             {isSubmitting ? 'Registering...' : 'Register'}
@@ -157,7 +172,6 @@ export default function RegisterPage() {
         <p className="auth-switch">
           Already have an account? <Link to="/login">Login</Link>
         </p>
-      </section>
-    </main>
+    </AuthPresentation>
   );
 }
