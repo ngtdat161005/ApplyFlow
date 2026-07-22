@@ -33,7 +33,11 @@ export function RecentApplicationsPanel({ applications = [] }) {
 
             return (
               <article
-                className="dashboard-list-item"
+                className={
+                  applicationId
+                    ? 'dashboard-list-item dashboard-list-item-interactive'
+                    : 'dashboard-list-item'
+                }
                 key={applicationId || `${application.company}-${application.role}`}
               >
                 <div className="dashboard-list-item-main">

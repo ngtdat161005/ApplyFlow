@@ -1,4 +1,5 @@
 import { EventItem } from './EventItem.jsx';
+import { EventTimelineSkeleton } from './EventTimelineSkeleton.jsx';
 
 export function EventTimeline({
   deleteError,
@@ -17,16 +18,7 @@ export function EventTimeline({
   onUpdate,
 }) {
   if (isLoading) {
-    return (
-      <section
-        className="applications-state applications-state-loading"
-        aria-live="polite"
-        role="status"
-      >
-        <h4>Loading events</h4>
-        <p>Fetching the recruitment timeline...</p>
-      </section>
-    );
+    return <EventTimelineSkeleton />;
   }
 
   if (loadError) {

@@ -6,7 +6,9 @@ import {
   getDashboardSummaryFromResponse,
 } from '../../api/dashboard.api.js';
 import { dashboardKeys } from '../../app/query-client.js';
+import { QueryUpdateStatus } from '../../components/feedback/LoadingSkeleton.jsx';
 import { AttentionFlagsPanel } from '../../features/dashboard/components/AttentionFlagsPanel.jsx';
+import { DashboardSkeleton } from '../../features/dashboard/components/DashboardSkeleton.jsx';
 import { DashboardSummaryCards } from '../../features/dashboard/components/DashboardSummaryCards.jsx';
 import { RecentApplicationsPanel } from '../../features/dashboard/components/RecentApplicationsPanel.jsx';
 import { StatusCountGrid } from '../../features/dashboard/components/StatusCountGrid.jsx';
@@ -30,7 +32,7 @@ export default function DashboardPage() {
   const hasResolvedSummary = dashboardQuery.data !== undefined;
   const initialLoadError = hasResolvedSummary ? '' : queryError;
   const backgroundLoadError = hasResolvedSummary ? queryError : '';
-  const isInitialLoading = dashboardQuery.isPending;
+  const isInitialLoading = dashboardQuery.isPending && !hasResolvedSummary;
   const isBackgroundFetching = dashboardQuery.isFetching && hasResolvedSummary;
 
   const hasNoApplications =
@@ -38,8 +40,15 @@ export default function DashboardPage() {
   const hasApplications =
     !isInitialLoading && !initialLoadError && summary?.totalApplications > 0;
 
+  if (isInitialLoading) {
+    return <DashboardSkeleton />;
+  }
+
   return (
-    <section className="page-section dashboard-page" aria-labelledby="dashboard-title">
+    <section
+      className="page-section dashboard-page page-mount"
+      aria-labelledby="dashboard-title"
+    >
       <div className="page-header">
         <p className="app-eyebrow">Overview</p>
         <h2 id="dashboard-title">Dashboard</h2>
@@ -47,17 +56,6 @@ export default function DashboardPage() {
           Overview of your job application pipeline.
         </p>
       </div>
-
-      {isInitialLoading ? (
-        <section
-          className="applications-state applications-state-loading dashboard-page-state"
-          aria-live="polite"
-          role="status"
-        >
-          <h3>Loading dashboard</h3>
-          <p>Retrieving your latest application summary.</p>
-        </section>
-      ) : null}
 
       {initialLoadError ? (
         <section
@@ -76,10 +74,10 @@ export default function DashboardPage() {
         </section>
       ) : null}
 
-      {isBackgroundFetching ? (
-        <p className="page-muted" role="status">
+      {hasResolvedSummary ? (
+        <QueryUpdateStatus isUpdating={isBackgroundFetching}>
           Updating dashboard...
-        </p>
+        </QueryUpdateStatus>
       ) : null}
 
       {backgroundLoadError ? (
