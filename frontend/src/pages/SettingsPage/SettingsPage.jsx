@@ -121,7 +121,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <section className="page-section settings-page" aria-labelledby="settings-title">
+    <section
+      className="page-section settings-page page-mount"
+      aria-labelledby="settings-title"
+    >
       <div className="page-header">
         <p className="app-eyebrow">Account</p>
         <h2 id="settings-title">Settings</h2>

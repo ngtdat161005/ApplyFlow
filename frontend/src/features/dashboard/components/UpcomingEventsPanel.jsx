@@ -24,7 +24,11 @@ export function UpcomingEventsPanel({ events = [] }) {
 
             return (
               <article
-                className="dashboard-list-item"
+                className={
+                  event.applicationId
+                    ? 'dashboard-list-item dashboard-list-item-interactive'
+                    : 'dashboard-list-item'
+                }
                 key={event.eventId || `${event.applicationId}-${event.title}`}
               >
                 <div className="dashboard-list-item-main">

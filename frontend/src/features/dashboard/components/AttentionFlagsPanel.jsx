@@ -27,7 +27,11 @@ export function AttentionFlagsPanel({ flags = [] }) {
 
             return (
               <article
-                className="dashboard-list-item dashboard-attention-item"
+                className={
+                  flag.applicationId
+                    ? 'dashboard-list-item dashboard-list-item-interactive dashboard-attention-item'
+                    : 'dashboard-list-item dashboard-attention-item'
+                }
                 key={`${flag.flagType}-${flag.applicationId}-${flag.referenceDate}`}
               >
                 <div className="dashboard-list-item-main">

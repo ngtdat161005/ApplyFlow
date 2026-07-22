@@ -1,5 +1,10 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   createApplication,
@@ -14,9 +19,11 @@ import {
   canonicalizeApplicationFilters,
   dashboardKeys,
 } from '../../app/query-client.js';
+import { QueryUpdateStatus } from '../../components/feedback/LoadingSkeleton.jsx';
 import { ApplicationFilters } from '../../features/applications/components/ApplicationFilters.jsx';
 import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
 import { ApplicationList } from '../../features/applications/components/ApplicationList.jsx';
+import { ApplicationsSkeleton } from '../../features/applications/components/ApplicationsSkeleton.jsx';
 import { getErrorMessage } from '../../features/auth/auth.utils.js';
 
 const DEFAULT_FILTERS = {
@@ -32,6 +39,7 @@ function hasActiveFilters(filters) {
 
 export default function ApplicationsPage() {
   const queryClient = useQueryClient();
+  const lastResolvedApplicationsRef = useRef();
   const [applicationActionError, setApplicationActionError] = useState('');
   const [deletingApplicationId, setDeletingApplicationId] = useState('');
   const [editingApplicationId, setEditingApplicationId] = useState('');
@@ -50,6 +58,7 @@ export default function ApplicationsPage() {
       const response = await getApplications(canonicalFilters);
       return getApplicationListFromResponse(response);
     },
+    placeholderData: keepPreviousData,
   });
 
   const createApplicationMutation = useMutation({
@@ -136,14 +145,21 @@ export default function ApplicationsPage() {
     },
   });
 
-  const applications = applicationsQuery.data || [];
+  if (applicationsQuery.data !== undefined) {
+    lastResolvedApplicationsRef.current = applicationsQuery.data;
+  }
+
+  const applications =
+    applicationsQuery.data ?? lastResolvedApplicationsRef.current ?? [];
   const queryError = applicationsQuery.isError
     ? getErrorMessage(applicationsQuery.error, 'Unable to load applications.')
     : '';
-  const hasResolvedData = applicationsQuery.data !== undefined;
+  const hasResolvedData =
+    applicationsQuery.data !== undefined ||
+    lastResolvedApplicationsRef.current !== undefined;
   const initialQueryError = hasResolvedData ? '' : queryError;
   const backgroundQueryError = hasResolvedData ? queryError : '';
-  const isInitialLoading = applicationsQuery.isPending;
+  const isInitialLoading = applicationsQuery.isPending && !hasResolvedData;
   const isBackgroundFetching = applicationsQuery.isFetching && hasResolvedData;
 
   async function handleCreateApplication(payload) {
@@ -179,8 +195,15 @@ export default function ApplicationsPage() {
     setFilters(canonicalizeApplicationFilters(nextFilters));
   }
 
+  if (isInitialLoading) {
+    return <ApplicationsSkeleton />;
+  }
+
   return (
-    <section className="page-section applications-page" aria-labelledby="applications-title">
+    <section
+      className="page-section applications-page page-mount"
+      aria-labelledby="applications-title"
+    >
       <div className="applications-page-header">
         <div className="page-header">
           <p className="app-eyebrow">Pipeline</p>
@@ -228,10 +251,10 @@ export default function ApplicationsPage() {
         />
       </section>
 
-      {isBackgroundFetching ? (
-        <p className="page-muted" role="status">
+      {hasResolvedData ? (
+        <QueryUpdateStatus isUpdating={isBackgroundFetching}>
           Updating applications...
-        </p>
+        </QueryUpdateStatus>
       ) : null}
 
       {backgroundQueryError ? (
@@ -244,35 +267,44 @@ export default function ApplicationsPage() {
         </div>
       ) : null}
 
-      <ApplicationList
-        actionError={applicationActionError}
-        applications={applications}
-        deletingApplicationId={deletingApplicationId}
-        editingApplicationId={editingApplicationId}
-        error={initialQueryError}
-        hasActiveFilters={hasActiveFilters(canonicalFilters)}
-        isDeleteConfirmOpenFor={pendingDeleteApplicationId}
-        isCreateFormOpen={isCreateFormOpen}
-        isLoading={isInitialLoading}
-        onCancelDelete={() => setPendingDeleteApplicationId('')}
-        onCancelEdit={() => setEditingApplicationId('')}
-        onConfirmDelete={handleDeleteApplication}
-        onCreate={handleOpenCreateForm}
-        onEdit={(application) => {
-          setIsCreateFormOpen(false);
-          setPendingDeleteApplicationId('');
-          setApplicationActionError('');
-          setEditingApplicationId(application._id);
-        }}
-        onRequestDelete={(application) => {
-          setEditingApplicationId('');
-          setApplicationActionError('');
-          setPendingDeleteApplicationId(application._id);
-        }}
-        onResetFilters={handleResetFilters}
-        onRetry={() => applicationsQuery.refetch()}
-        onUpdate={handleUpdateApplication}
-      />
+      <div
+        aria-busy={isBackgroundFetching}
+        className={
+          isBackgroundFetching
+            ? 'application-results application-results-updating'
+            : 'application-results'
+        }
+      >
+        <ApplicationList
+          actionError={applicationActionError}
+          applications={applications}
+          deletingApplicationId={deletingApplicationId}
+          editingApplicationId={editingApplicationId}
+          error={initialQueryError}
+          hasActiveFilters={hasActiveFilters(canonicalFilters)}
+          isDeleteConfirmOpenFor={pendingDeleteApplicationId}
+          isCreateFormOpen={isCreateFormOpen}
+          isLoading={isInitialLoading}
+          onCancelDelete={() => setPendingDeleteApplicationId('')}
+          onCancelEdit={() => setEditingApplicationId('')}
+          onConfirmDelete={handleDeleteApplication}
+          onCreate={handleOpenCreateForm}
+          onEdit={(application) => {
+            setIsCreateFormOpen(false);
+            setPendingDeleteApplicationId('');
+            setApplicationActionError('');
+            setEditingApplicationId(application._id);
+          }}
+          onRequestDelete={(application) => {
+            setEditingApplicationId('');
+            setApplicationActionError('');
+            setPendingDeleteApplicationId(application._id);
+          }}
+          onResetFilters={handleResetFilters}
+          onRetry={() => applicationsQuery.refetch()}
+          onUpdate={handleUpdateApplication}
+        />
+      </div>
     </section>
   );
 }

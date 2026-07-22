@@ -161,6 +161,10 @@
   padding: var(--space-4);
 }
 
+.dashboard-list-item-interactive {
+  transition: box-shadow 160ms ease-out;
+}
+
 .dashboard-list-item h4 {
   font-size: var(--font-size-lg);
   overflow-wrap: anywhere;

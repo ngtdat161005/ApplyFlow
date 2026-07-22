@@ -17,6 +17,8 @@ import {
   updateApplicationEvent,
 } from '../../api/event.api.js';
 import { applicationKeys, dashboardKeys } from '../../app/query-client.js';
+import { QueryUpdateStatus } from '../../components/feedback/LoadingSkeleton.jsx';
+import { ApplicationDetailSkeleton } from '../../features/applications/components/ApplicationDetailSkeleton.jsx';
 import { ApplicationOverview } from '../../features/applications/components/ApplicationOverview.jsx';
 import { ApplicationForm } from '../../features/applications/components/ApplicationForm.jsx';
 import { EventForm } from '../../features/events/components/EventForm.jsx';
@@ -272,7 +274,8 @@ export default function ApplicationDetailPage() {
   }
 
   const hasResolvedApplication = applicationQuery.data !== undefined;
-  const isPageLoading = applicationQuery.isPending && Boolean(applicationId);
+  const isPageLoading =
+    applicationQuery.isPending && !hasResolvedApplication && Boolean(applicationId);
   const isApplicationUpdating = applicationQuery.isFetching && hasResolvedApplication;
   const initialApplicationError = currentApplication ? null : currentApplicationError;
   const backgroundApplicationError = currentApplication ? currentApplicationError : null;
@@ -287,8 +290,15 @@ export default function ApplicationDetailPage() {
   const isEventsLoading = eventsQuery.isPending && Boolean(applicationId);
   const isEventsUpdating = eventsQuery.isFetching && hasResolvedEvents;
 
+  if (isPageLoading) {
+    return <ApplicationDetailSkeleton />;
+  }
+
   return (
-    <section className="page-section application-detail-page" aria-labelledby="application-detail-title">
+    <section
+      className="page-section application-detail-page page-mount"
+      aria-labelledby="application-detail-title"
+    >
       <div className="application-detail-topbar">
         <Link className="text-link" to="/applications">
           Back to applications
@@ -307,17 +317,6 @@ export default function ApplicationDetailPage() {
         </div>
       </div>
 
-      {isPageLoading ? (
-        <section
-          className="applications-state applications-state-loading"
-          aria-live="polite"
-          role="status"
-        >
-          <h3>Loading application</h3>
-          <p>Fetching application details...</p>
-        </section>
-      ) : null}
-
       {initialApplicationError && isApplicationUnavailable ? (
         <section className="applications-state application-detail-state-unavailable" role="alert">
           <h3>Application unavailable</h3>
@@ -335,10 +334,10 @@ export default function ApplicationDetailPage() {
         </section>
       ) : null}
 
-      {isApplicationUpdating ? (
-        <p className="page-muted" role="status">
+      {currentApplication ? (
+        <QueryUpdateStatus isUpdating={isApplicationUpdating}>
           Updating application...
-        </p>
+        </QueryUpdateStatus>
       ) : null}
 
       {backgroundApplicationError ? (
@@ -429,10 +428,10 @@ export default function ApplicationDetailPage() {
             </section>
           ) : null}
 
-          {isEventsUpdating ? (
-            <p className="page-muted" role="status">
+          {hasResolvedEvents ? (
+            <QueryUpdateStatus isUpdating={isEventsUpdating}>
               Updating events...
-            </p>
+            </QueryUpdateStatus>
           ) : null}
 
           {backgroundEventsError ? (
