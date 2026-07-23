@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:v3-query-qa": "node scripts/check-v3-query-qa.js",
     "preview": "vite preview"
   },
   "dependencies": {

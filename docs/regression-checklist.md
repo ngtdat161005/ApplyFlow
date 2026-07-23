@@ -1,6 +1,7 @@
 # ApplyFlow Regression Checklist
 
-Use this checklist during the audit step for every V2 task. Mark items not applicable in the PR with a short reason.
+Use this checklist during the audit step for every V2 or V3 task. Mark items not applicable in the
+PR with a short reason.
 
 ## Canonical Frontend Manual Regression
 
@@ -8,6 +9,28 @@ Use [frontend/docs/manual-frontend-testcases.md](../frontend/docs/manual-fronten
 the executable V2 browser checklist, execution record, fixture strategy, result fields, and
 evidence notes. This document remains a concise cross-task risk checklist and does not duplicate
 those detailed cases.
+
+Use [frontend/docs/manual-v3-testcases.md](../frontend/docs/manual-v3-testcases.md) for the V3
+query/security/visual companion cases and [docs/v3-qa-evidence-template.md](v3-qa-evidence-template.md)
+for current-run evidence. Neither document converts preserved V2 results into V3 passes.
+
+## V3 QA Carry-Forward
+
+- Verify the query invalidation matrix for application create/update/delete and event mutations.
+- Confirm deleting an application removes its detail and nested event cache without clearing other
+  users' or applications' data.
+- Distinguish initial skeletons from background refetch status and background error recovery.
+- Keep forgot-password enumeration, replacement token, rate-limit, provider-failure, and safe-log
+  evidence separate by execution class.
+- Keep reset/delete mock, standalone-Mongo, and real-replica-set evidence separate. Never infer real
+  transaction commit/rollback from source inspection or mocks.
+- Exercise forgot/reset/settings focus, keyboard, validation, busy, mobile, and error states.
+- Verify reduced-motion disables decorative animation and touch/coarse pointers disable auth
+  parallax without hiding content.
+- Use 20–50 disposable synthetic applications across statuses/dates; record exact cleanup and never
+  seed private real-user data.
+- Treat a helper's explicit `SKIPPED` output as skipped even when its process exits successfully.
+- State exactly what the inspected GitHub workflow runs; do not imply live E2E or browser coverage.
 
 ## V2 Baseline Carry-Forward
 

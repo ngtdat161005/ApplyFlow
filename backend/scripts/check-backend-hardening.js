@@ -1724,16 +1724,26 @@ await checkEventCrudContract();
 checkDashboardContract();
 await checkErrorMiddleware();
 await checkAuthMiddleware();
+console.log("PASS [mock/source] tokenVersion authorization and safe auth errors");
 checkForgotPasswordValidation();
 checkPasswordResetTokenAndProxyPolicy();
 await checkForgotPasswordRateLimit();
 await checkPasswordResetEmailAdapters();
 await checkPasswordResetService();
+console.log(
+  "PASS [mock/source] forgot-password enumeration, replacement, rate limits, provider failure cleanup, and secret-safe operational logs",
+);
 checkResetPasswordValidation();
 await checkResetPasswordConsumption();
 await checkMongoTransactionRunner();
+console.log(
+  "PASS [mock/source] reset validation, one-time claim orchestration, unsupported transactions, and session cleanup",
+);
 checkDeleteAccountValidation();
 await checkAccountDeletionOrchestration();
+console.log(
+  "PASS [mock/source] account deletion password gate, ordered cascade orchestration, and unsupported transactions",
+);
 checkPasswordResetEnvironmentValidation();
 checkProductionErrorMiddleware();
 await checkServiceMalformedIdFallbacks();

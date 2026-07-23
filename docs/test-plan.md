@@ -1,6 +1,7 @@
 # ApplyFlow Test Plan
 
-This plan defines the default checks for V2 branches. Add task-specific checks in the PR when a change touches behavior not covered here.
+This plan defines the preserved V2 checks and the V3 additions. Add task-specific checks in the PR
+when a change touches behavior not covered here.
 
 Recorded V2 execution evidence and the reusable future-run template are in [v2-test-evidence.md](v2-test-evidence.md).
 
@@ -59,9 +60,9 @@ Use `APPLYFLOW_BACKEND_ORIGIN` if the backend is not running at the default orig
 
 Run E2E only against a disposable MongoDB database, never a production or personal database. The
 script creates run-specific users, applications, and events, and deletes current-run applications
-and their events where the API permits. ApplyFlow has no user-delete endpoint, so successful
-disposable user registrations remain in the selected test database and may require database-level
-cleanup after the run.
+and their events where the API permits. The general E2E script still leaves some successful
+disposable registrations even though V3 provides authenticated account deletion, so record and
+clean up any retained users in the selected disposable database after the run.
 
 ## Local Frontend Checks
 
@@ -69,8 +70,13 @@ Run this before opening a PR for frontend changes:
 
 ```sh
 cd frontend
+npm run check:v3-query-qa
 npm run build
 ```
+
+`check:v3-query-qa` uses deterministic logic assertions, a 30-record synthetic in-memory cache,
+and focused source-contract checks. It does not prove browser rendering, live HTTP behavior, or a
+real database.
 
 For manual browser QA:
 
@@ -87,6 +93,12 @@ record before changing testcase results; all canonical case results remain `NOT 
 environment-dependent failure-injection and two-user cases separate from ordinary live-environment
 execution.
 
+Use [frontend/docs/manual-v3-testcases.md](../frontend/docs/manual-v3-testcases.md) for V3
+query/cache, forgot/reset password, settings deletion, accessibility, responsive, motion, skeleton,
+background-refetch, and 20–50 record scenarios. Record a current run with
+[the V3 evidence template](v3-qa-evidence-template.md); do not edit either canonical checklist to
+claim execution.
+
 Record:
 
 - Browser and viewport used.
@@ -94,6 +106,40 @@ Record:
 - Main happy path verified.
 - Permission or unauthorized path verified when access control is involved.
 - Screenshots or notes for any visual changes.
+
+## V3 Environment-Dependent Checks
+
+The V3 backend hardening command is mock/source evidence for forgot/reset/delete security
+orchestration and controlled errors. It is not real transaction evidence.
+
+The existing `npm run check:e2e` directly inspects MongoDB topology before its reset/delete
+transaction assertions. Run it only against an explicitly disposable replica set. Record a real
+replica-set PASS only when the current run reports both a replica-set name and logical-session
+support; syntax checks, mocks, and standalone Mongo are separate evidence classes.
+
+For the disposable 30-application HTTP matrix, start the backend against the confirmed disposable
+database, then run:
+
+```powershell
+cd backend
+$env:V3_QA_DISPOSABLE_CONFIRM='YES'
+npm run check:v3-large-dataset
+Remove-Item Env:V3_QA_DISPOSABLE_CONFIRM
+```
+
+Without the exact confirmation, the helper prints `SKIPPED` and performs no writes. It validates
+list/search/filter/sort/dashboard behavior and attempts account-deletion cleanup. On a database
+without transaction support it removes the created applications and reports that the synthetic
+user remains. A successful HTTP cleanup does not by itself prove replica-set topology.
+
+Keep evidence classes separate:
+
+- `check:backend-hardening`: deterministic mock/source assertions;
+- `check:e2e`: live HTTP/database plus explicit real-replica-set transaction scenarios;
+- `check:v3-large-dataset`: live HTTP with 30 disposable synthetic applications;
+- `check:v3-query-qa`: frontend logic, synthetic Query cache, and source inspection;
+- browser/manual: rendered behavior at recorded browser/viewport/input preferences;
+- GitHub CI: only the commands configured in the inspected workflow revision.
 
 ## Per-Task Verification Expectations
 
