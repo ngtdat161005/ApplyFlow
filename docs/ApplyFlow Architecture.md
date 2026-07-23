@@ -1310,3 +1310,152 @@ ApplyFlow V1 should be implemented as a **modular monolith** with a **layered ba
 - do not scatter attention rules across files
 - do not add abstractions that make a small app harder to read
 - optimize for a reviewer being able to understand the code quickly
+
+-----
+# 26. Current Merged Architecture (V3)
+
+Sections 1–25 preserve the original V1 architecture and its rationale. V2 hardened those contracts, and V3 incrementally extends the same modular monolith; it is not a replacement architecture. This section records the implementation merged through V3-16.
+
+## 26.1 System shape and boundaries
+
+The current request path remains:
+
+```text
+React frontend
+→ HTTP API
+→ Route
+→ Middleware
+→ Controller
+→ Service
+→ Repository
+→ MongoDB
+```
+
+Routes wire endpoints, middleware owns authentication/validation/error translation, controllers handle HTTP input and output, services coordinate business rules and transactions, and repositories perform MongoDB operations. The frontend retains page, feature, API, and application-provider boundaries. V3 did not add Mongoose, a second backend, a generic CRUD layer, or a UI framework.
+
+## 26.2 Frontend state architecture
+
+`frontend/src/app/providers.jsx` mounts one shared TanStack `QueryClientProvider` around the existing `AuthProvider`. These providers have intentionally different ownership:
+
+- `AuthProvider` (`frontend/src/features/auth/auth.store.js`) owns the persisted access token, current user, session bootstrap through `GET /auth/me`, login, registration, logout, and the global unauthorized-response subscription.
+- TanStack Query owns server state only for the applications list, application detail, application events, and dashboard summary.
+- Form inputs, filters, dialogs, confirmation states, and mutation-specific errors remain local component state.
+
+`frontend/src/app/query-client.js` defines the shared client and central key factories:
+
+```text
+applications
+├── list + canonical filters
+└── detail + application ID
+    └── events
+
+dashboard
+└── summary
+```
+
+Application-list filters are canonicalized before entering the key: `search` is trimmed and the `status`, `sortBy`, and `sortOrder` string values are normalized. Default query behavior uses a 30-second `staleTime`, does not refetch on window focus, does refetch after reconnect, and retries once only for network errors or HTTP `5xx` responses. Mutations do not retry.
+
+V3 deliberately has no optimistic updates. Successful create/update/delete operations invalidate the exact list/detail/dashboard boundaries they affect. Deleting an application removes its detail subtree, including the nested event key, from the cache. During filter changes or background refetches, the list retains the previous or last resolved data; initial loading uses skeletons, while background fetching uses a quieter updating state over usable content. A background error does not replace already resolved content.
+
+Private Query data is cleared together with Auth state after logout, global `401` session invalidation, or successful account deletion. A failed account-deletion request does not clear the token, current user, or Query cache. Clearing the cache before navigating after a successful deletion also prevents browser Back navigation from revealing retained private client data.
+
+## 26.3 Authentication and token versioning
+
+JWT bearer tokens remain the session mechanism. New users are stored with `tokenVersion: 0`. The compatibility normalizer treats a missing stored version as `0`, so users created before the field was added can still authenticate with a compatible token; non-numeric, negative, or otherwise invalid values are rejected.
+
+Login signs a one-day JWT containing `sub` and the normalized `tokenVersion`. For every protected request, `requireAuth` verifies the signature, loads the current user through the Auth service/repository, and compares the token version in the JWT with the current stored version. A missing user, invalid stored version, or mismatch produces `401`, so the old JWT can no longer authorize API access. Ordinary authenticated requests also trigger the frontend's global unauthorized handler; the account-deletion request suppresses that handler so its expected wrong-password `401` can remain a form error.
+
+A successful password reset increments `tokenVersion` in the same transaction as the password update. Previously issued JWTs therefore fail subsequent protected requests. Safe user mapping exposes only `_id`, `displayName`, `email`, `createdAt`, and `updatedAt`; it never exposes `passwordHash` or `tokenVersion`.
+
+## 26.4 Password reset
+
+The implemented flow is:
+
+```text
+Forgot-password form
+→ POST /auth/forgot-password
+→ normalized-email and client-IP rate limits
+→ user lookup
+→ reset-token replacement
+→ email adapter
+→ /reset-password?token=... URL
+→ POST /auth/reset-password
+→ MongoDB transaction
+→ one-time token claim
+→ password update + tokenVersion increment
+```
+
+The forgot-password validator trims and lowercases the email. The middleware applies independent, process-local fixed windows to a SHA-256 hash of that normalized email and to the Express client IP. Because `app.set("trust proxy", false)` is fixed in source and there is no trusted-proxy environment setting, a proxy deployment must review which address Express exposes as `req.ip`.
+
+Both existing and non-existing accounts receive the same public success message. A known user gets 32 cryptographically random bytes encoded as a 64-character hexadecimal raw token. Only its SHA-256 hash is stored; the raw token exists in the reset URL but is not persisted in MongoDB.
+
+The `passwordResetTokens` collection has two lazily created indexes:
+
+- `password_reset_tokens_user_id`: unique `{ userId: 1 }`, enforcing one active token per user;
+- `password_reset_tokens_expiry_ttl`: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`, providing eventual cleanup.
+
+Issuing a new token deletes the user's previous token before inserting its replacement. Reset validity does not depend on the TTL monitor: the atomic claim explicitly requires `expiresAt > now` and removes the matching token with `findOneAndDelete`. The token is therefore single-use, and replacement invalidates the previous link.
+
+The claim, password-hash update, and `tokenVersion` increment execute in one MongoDB transaction using snapshot read concern and majority write concern. Reset never issues a new JWT or automatically logs the user in. If transactions are unsupported or temporarily unavailable, the service returns the controlled `RESET_UNAVAILABLE`/`503` contract and does not attempt a non-atomic fallback.
+
+## 26.5 Email adapter
+
+`backend/src/services/email/password-reset-email.adapter.js` isolates delivery from password-reset orchestration.
+
+### Console provider
+
+`EMAIL_PROVIDER=console` is the default outside production and is intended for local development/test. In local development, it writes a delivery object containing the recipient, subject, and reset text/link to the backend console. The configured adapter suppresses that console output when `NODE_ENV=test`; focused tests can inject a capture writer. This provider exercises the adapter boundary but does not prove that an external message was delivered. Environment validation forbids it in production.
+
+The console reset URL is sensitive because it contains the raw one-time token. It must stay in local output and must not be committed or shared as evidence.
+
+### Resend provider
+
+`EMAIL_PROVIDER=resend` selects the Resend client and requires `RESEND_API_KEY` plus a valid `RESEND_FROM_EMAIL`. The adapter sends plain text from the configured sender and treats a provider error as delivery failure. If delivery fails, the reset service attempts to delete the newly stored token and records sanitized operational error events without logging the token.
+
+The code and configuration path are implemented, but V3-16 did not verify real Resend delivery. A localhost frontend origin can be used from the same machine, but a production-like flow needs a public HTTPS `FRONTEND_ORIGIN`, a private provider key, and a sender valid for the provider account.
+
+## 26.6 Account deletion
+
+Account deletion is the protected `DELETE /users/me` route. The user identity comes only from the authenticated JWT; the request body contains the current password, not a user ID. The service loads the user and verifies the password before opening the transaction. An incorrect password returns `INVALID_PASSWORD`/`401` without changing the account or client session.
+
+One MongoDB session/transaction performs the cascade in this source-defined order:
+
+1. delete application events for the user;
+2. delete applications for the user;
+3. delete password-reset tokens for the user;
+4. delete the user.
+
+The cascade is atomic within the transaction. Unsupported or unavailable transactions return `DELETE_UNAVAILABLE`/`503`; there is no partial-write fallback. The Settings page clears Auth state and the private Query cache only after the API succeeds. Wrong-password, unavailable, and other errors preserve the current session and cached data.
+
+V3 accepts a concurrency limitation: it does not add an account `deleting` flag, write fence, or recovery state machine. A mutation sent through a separately authenticated concurrent context could theoretically interleave with deletion and create an orphan after the transaction's matching delete has run. The transaction makes the cascade itself atomic; it does not prevent every possible concurrent write outside that transaction.
+
+## 26.7 Current frontend routes
+
+`frontend/src/app/router.jsx` classifies routes as follows:
+
+- Public regardless of session: `/forgot-password` and `/reset-password?token=...`.
+- Public-only: `/login` and `/register`; an authenticated user is redirected to `/dashboard`.
+- Protected inside `AppLayout`: `/dashboard`, `/applications`, `/applications/:applicationId`, and `/settings`.
+- `/` redirects to `/dashboard`; the catch-all route renders the not-found page.
+
+Protected and public-only route guards wait for Auth bootstrap. Non-`401` bootstrap failures retain the stored token and offer retry/logout rather than misclassifying the session as signed out.
+
+## 26.8 Visual, loading, and accessibility boundaries
+
+Styling remains plain CSS with shared CSS custom-property design tokens. The repository does not use Tailwind, MUI, CSS-in-JS, or an animation library. The login/register presentation includes a clearly labelled, inert `Sample data` preview; it is not interactive application data.
+
+Dashboard, application-list, application-detail, and event-timeline initial loads use decorative skeletons. Each skeleton exposes a visually hidden status label while the decorative blocks are `aria-hidden`, so they do not enter the focus order. Background refetch retains resolved content and announces a separate updating state instead of replacing the page with a skeleton.
+
+Motion is limited to short CSS entry/shimmer effects and a small requestAnimationFrame-driven pointer parallax on the Auth preview. `prefers-reduced-motion: reduce` disables the CSS motion and parallax. Coarse-pointer or no-hover environments also disable parallax, leaving touch interactions free of pointer-only behavior. The Settings deletion dialog uses the native `dialog` element, moves focus to the password field, handles Escape/cancel, prevents closing during submission, and restores focus to its trigger after cancellation.
+
+## 26.9 Environment and deployment-sensitive behavior
+
+`backend/src/config/env.js` requires `PORT`, `MONGODB_URI`, `MONGODB_DB_NAME`, `JWT_SECRET`, and `FRONTEND_ORIGIN`. `FRONTEND_ORIGIN` must be an absolute HTTP/HTTPS origin with no username, password, path, query, or fragment; production requires HTTPS. Optional positive-integer password-reset controls default to a 30-minute token lifetime, 5 requests per normalized email per 15 minutes, and 20 requests per client IP per 60 minutes.
+
+Outside production, `EMAIL_PROVIDER` defaults to `console`. Production requires an explicit provider, rejects `console`, and therefore requires valid Resend configuration in the current two-provider implementation. `JWT_SECRET`, `MONGODB_URI`, and `RESEND_API_KEY` are secrets and must never enter source control or evidence. `RESEND_FROM_EMAIL` is configuration-sensitive and should not expose a private identity in public evidence.
+
+Password reset and account deletion depend on MongoDB transactions. The transaction runner uses `withTransaction`, snapshot reads, majority writes, and always ends its session. The recorded V3-16 run did not execute either flow on a confirmed disposable replica set, so source/mocked checks must not be described as real transaction proof.
+
+## 26.10 Verification boundary
+
+V3-16 records the merged implementation as **Implemented, not fully verified**. Safe automated checks, frontend build, focused Query/source-contract QA, focused public-route browser smoke, and configured GitHub CI jobs passed. Live backend HTTP E2E, live 30-record HTTP execution, real replica-set reset/delete transaction behavior, the full authenticated browser matrix, authenticated Settings behavior, runtime loading/motion timing, and real Resend delivery remain unverified as detailed in `v3-16-qa-evidence.md`. V3-18, not this architecture update, owns the final audit and release verdict.
