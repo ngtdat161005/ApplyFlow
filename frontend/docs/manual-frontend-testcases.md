@@ -5,6 +5,10 @@ This is the canonical detailed manual-regression document for ApplyFlow V2. Use
 [docs/test-plan.md](../../docs/test-plan.md) for command and evidence policy. This checklist records
 manual observations only; it does not replace the backend checks or backend HTTP E2E script.
 
+For V3 query/cache, password-reset, settings, motion, skeleton, and large-dataset coverage, use the
+[V3 manual and browser QA companion](manual-v3-testcases.md) without changing these preserved V2
+baseline cases.
+
 ## Tester Status Values
 
 Use exactly one status for each testcase:

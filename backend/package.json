@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "check:attention": "node scripts/check-attention-domain.js",
     "check:backend-hardening": "node scripts/check-backend-hardening.js",
-    "check:e2e": "node scripts/check-backend-e2e.js"
+    "check:e2e": "node scripts/check-backend-e2e.js",
+    "check:v3-large-dataset": "node scripts/check-v3-large-dataset.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
